@@ -5,7 +5,7 @@ const {
   getSmartSearchResults,
   getPersonalizedRecommendations,
   getBudgetRecommendations,
-} = require('../services/openaiService');
+} = require('../services/geminiService');
 
 // @desc    Get AI product recommendations
 // @route   GET /api/ai/recommendations
