@@ -9,7 +9,10 @@ dotenv.config();
 const app = express();
 
 // Connect to database
-connectDB();
+connectDB().then(() => {
+  const autoSeed = require('./config/autoSeed');
+  autoSeed();
+});
 
 // Middleware
 app.use(cors({ origin: 'http://localhost:5173', credentials: true }));
@@ -17,11 +20,32 @@ app.use(express.json());
 app.use(cookieParser());
 
 // Routes
-// app.use('/api/auth', require('./routes/authRoutes'));
+app.use('/api/auth', require('./routes/authRoutes'));
+app.use('/api/products', require('./routes/productRoutes'));
+app.use('/api/cart', require('./routes/cartRoutes'));
+app.use('/api/wishlist', require('./routes/wishlistRoutes'));
+app.use('/api/orders', require('./routes/orderRoutes'));
+app.use('/api/ai', require('./routes/aiRoutes'));
 
 // Basic route
 app.get('/', (req, res) => {
   res.send('NexaCart API is running...');
+});
+
+// Error handling middleware
+app.use((req, res, next) => {
+  const error = new Error(`Not Found - ${req.originalUrl}`);
+  res.status(404);
+  next(error);
+});
+
+app.use((err, req, res, next) => {
+  const statusCode = res.statusCode === 200 ? 500 : res.statusCode;
+  res.status(statusCode);
+  res.json({
+    message: err.message,
+    stack: process.env.NODE_ENV === 'production' ? null : err.stack,
+  });
 });
 
 const PORT = process.env.PORT || 5000;
