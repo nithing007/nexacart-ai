@@ -55,17 +55,17 @@ function App() {
       </div>
     }>
       <Routes>
-        {/* Public Routes with MainLayout */}
-        <Route path="/" element={<MainLayout />}>
-          <Route index element={<Home />} />
-          <Route path="login" element={<Login />} />
-          <Route path="register" element={<Register />} />
-          <Route path="products" element={<Products />} />
-          <Route path="products/:id" element={<ProductDetail />} />
-          <Route path="search" element={<Search />} />
+        {/* Standalone Login and Register Pages (No Navbar/Footer) */}
+        <Route path="/login" element={<Login />} />
+        <Route path="/register" element={<Register />} />
 
-          {/* Protected Routes (Wrapped in ProtectedRoute inside MainLayout) */}
-          <Route element={<ProtectedRoute />}>
+        {/* Protected eCommerce Routes (Requires Login) */}
+        <Route element={<ProtectedRoute />}>
+          <Route path="/" element={<MainLayout />}>
+            <Route index element={<Home />} />
+            <Route path="products" element={<Products />} />
+            <Route path="products/:id" element={<ProductDetail />} />
+            <Route path="search" element={<Search />} />
             <Route path="cart" element={<Cart />} />
             <Route path="wishlist" element={<Wishlist />} />
             <Route path="checkout" element={<Checkout />} />
@@ -76,11 +76,11 @@ function App() {
             <Route path="ai-recommendations" element={<AiRecommendations />} />
             <Route path="user/dashboard" element={<UserDashboard />} />
           </Route>
-        </Route>
 
-        {/* Admin Protected Routes */}
-        <Route path="/admin" element={<ProtectedRoute adminOnly={true}><AdminLayout /></ProtectedRoute>}>
-          <Route index element={<AdminDashboard />} />
+          {/* Admin Protected Routes */}
+          <Route path="/admin" element={<AdminLayout />}>
+            <Route index element={<AdminDashboard />} />
+          </Route>
         </Route>
       </Routes>
     </Suspense>

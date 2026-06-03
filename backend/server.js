@@ -12,12 +12,21 @@ const app = express();
 connectDB().then(() => {
   const autoSeed = require('./config/autoSeed');
   autoSeed();
+  
+  // Verify Gemini API Connection
+  const { checkGeminiConnection } = require('./services/geminiService');
+  checkGeminiConnection();
 });
 
 // Middleware
 app.use(cors({ origin: 'http://localhost:5173', credentials: true }));
 app.use(express.json());
 app.use(cookieParser());
+
+app.use((req, res, next) => {
+  console.log(`[Request] ${req.method} ${req.url}`);
+  next();
+});
 
 // Routes
 app.use('/api/auth', require('./routes/authRoutes'));

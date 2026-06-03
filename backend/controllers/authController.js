@@ -15,6 +15,19 @@ const registerUser = async (req, res) => {
   try {
     const { firstName, lastName, email, password, dob, phoneNumber, address } = req.body;
 
+    if (!email) {
+      return res.status(400).json({ message: 'Missing email' });
+    }
+    if (!password) {
+      return res.status(400).json({ message: 'Missing password' });
+    }
+    if (!firstName || !lastName) {
+      return res.status(400).json({ message: 'First name and last name are required' });
+    }
+    if (phoneNumber && !/^\+?[0-9]{7,15}$/.test(phoneNumber)) {
+      return res.status(400).json({ message: 'Invalid phone number' });
+    }
+
     const userExists = await User.findOne({ email });
 
     if (userExists) {
