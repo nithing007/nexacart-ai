@@ -19,7 +19,28 @@ connectDB().then(() => {
 });
 
 // Middleware
-app.use(cors({ origin: 'http://localhost:5173', credentials: true }));
+// CORS configuration allowing localhost, production, and Vercel preview domains
+const allowedOrigins = [
+  'http://localhost:5173',
+  'https://nexacart-ai.vercel.app'
+];
+
+app.use(cors({
+  origin: function (origin, callback) {
+    // Allow requests with no origin (like mobile apps or curl)
+    if (!origin) return callback(null, true);
+    
+    const isAllowed = allowedOrigins.includes(origin) || 
+      /^https:\/\/nexacart-.*\.vercel\.app$/.test(origin);
+      
+    if (isAllowed) {
+      callback(null, true);
+    } else {
+      callback(new Error(`Origin ${origin} not allowed by CORS`));
+    }
+  },
+  credentials: true
+}));
 app.use(express.json());
 app.use(cookieParser());
 
