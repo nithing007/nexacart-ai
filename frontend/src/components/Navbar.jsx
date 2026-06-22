@@ -50,12 +50,7 @@ const Navbar = () => {
         {/* Logo and Brand */}
         <div className="flex items-center justify-between w-full md:w-auto">
           <Link to="/" className="flex items-center gap-2">
-            <div className="bg-green-600 p-2 rounded-lg text-white font-bold flex items-center justify-center shadow-md">
-              <span className="text-xl">AI</span>
-            </div>
-            <span className="text-2xl font-black bg-gradient-to-r from-gray-900 via-green-700 to-green-600 bg-clip-text text-transparent">
-              NexaCart
-            </span>
+            <img src="/logo.png" alt="NexaCart AI" className="h-10 w-auto object-contain" />
           </Link>
           
           {/* Cart & Heart icons for mobile */}
