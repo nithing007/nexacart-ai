@@ -4,7 +4,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   Sparkles, Wallet, Search, ArrowRight, CheckCircle2, 
-  Mail, Heart, ShoppingCart, Star, 
+  Heart, ShoppingCart, Star, 
   TrendingUp, ChevronRight 
 } from 'lucide-react';
 import { Button } from '../components/ui/button';
@@ -16,6 +16,50 @@ import { getFallbackImage } from '../utils/imageHelper';
 import AIChatBox from '../components/AIChat/AIChatBox';
 import api from '../services/api';
 import toast from 'react-hot-toast';
+
+const AnimatedCounter = ({ value, duration = 1500 }) => {
+  const [displayValue, setDisplayValue] = useState('0');
+
+  useEffect(() => {
+    const numericStr = value.replace(/[^0-9.]/g, '');
+    const target = parseFloat(numericStr);
+    if (isNaN(target)) {
+      setDisplayValue(value);
+      return;
+    }
+
+    const isPercent = value.includes('%');
+    const isCurrency = value.includes('₹');
+    const isPlus = value.includes('+');
+
+    let startTime = null;
+
+    const animate = (timestamp) => {
+      if (!startTime) startTime = timestamp;
+      const progress = timestamp - startTime;
+      const rate = Math.min(progress / duration, 1);
+      const easeRate = rate * (2 - rate);
+      const current = easeRate * target;
+
+      if (isPercent) {
+        setDisplayValue(`${current.toFixed(1)}%`);
+      } else {
+        const formatted = Math.floor(current).toLocaleString();
+        setDisplayValue(`${isCurrency ? '₹' : ''}${formatted}${isPlus ? '+' : ''}`);
+      }
+
+      if (rate < 1) {
+        requestAnimationFrame(animate);
+      } else {
+        setDisplayValue(value);
+      }
+    };
+
+    requestAnimationFrame(animate);
+  }, [value, duration]);
+
+  return <span>{displayValue}</span>;
+};
 
 const Home = () => {
   const dispatch = useDispatch();
@@ -144,45 +188,72 @@ const Home = () => {
   return (
     <div className="space-y-20 pb-12">
       
-      {/* 1. Hero Section Upgrade */}
-      <section className="bg-gradient-to-tr from-green-950 via-gray-900 to-emerald-950 rounded-3xl p-8 md:p-12 lg:p-16 flex flex-col lg:flex-row items-center justify-between shadow-2xl border border-emerald-900/50 relative overflow-hidden">
+      {/* 1. Hero Section Redesign */}
+      <section className="bg-gradient-to-tr from-green-950 via-gray-900 to-emerald-950 rounded-[2rem] p-8 md:p-12 lg:p-16 flex flex-col lg:flex-row items-center justify-between gap-12 shadow-2xl border border-emerald-900/50 relative overflow-hidden">
         
         {/* Animated Glow Backdrops */}
-        <div className="absolute top-0 right-0 w-80 h-80 bg-green-500/10 rounded-full blur-3xl -mr-20 -mt-20"></div>
-        <div className="absolute bottom-0 left-0 w-96 h-96 bg-emerald-500/5 rounded-full blur-3xl -ml-20 -mb-20"></div>
+        <div className="absolute top-0 right-0 w-80 h-80 bg-green-500/10 rounded-full blur-3xl -mr-20 -mt-20 pointer-events-none"></div>
+        <div className="absolute bottom-0 left-0 w-96 h-96 bg-emerald-500/5 rounded-full blur-3xl -ml-20 -mb-20 pointer-events-none"></div>
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[300px] bg-emerald-500/5 rounded-full blur-3xl pointer-events-none"></div>
 
-        {/* Text Area */}
-        <div className="lg:w-1/2 space-y-6 z-10 text-center lg:text-left">
-          <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs font-semibold shadow-inner">
-            <Sparkles className="w-3.5 h-3.5 animate-pulse" /> AI-Powered Shopping Platform
+        {/* Text & Trust Badges Area (55%) */}
+        <div className="lg:w-[55%] space-y-8 z-10 text-center lg:text-left flex flex-col justify-center">
+          <div className="space-y-4">
+            <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs font-semibold shadow-inner w-fit mx-auto lg:mx-0">
+              <Sparkles className="w-3.5 h-3.5 animate-pulse" /> AI-Powered Shopping Platform
+            </div>
+            
+            <h1 className="text-4xl md:text-5xl lg:text-6xl font-black text-white leading-tight tracking-tight">
+              The Smartest Way To Shop Online Powered By <span className="bg-gradient-to-r from-green-400 to-emerald-300 bg-clip-text text-transparent">AI</span>
+            </h1>
+            
+            <p className="text-gray-300 text-base md:text-lg max-w-xl mx-auto lg:mx-0 font-medium leading-relaxed">
+              Natural language search, personalized catalog curation, and automated budgeting models - custom tailored just for you.
+            </p>
           </div>
           
-          <h1 className="text-4xl md:text-5xl lg:text-6xl font-black text-white leading-tight">
-            The Smartest Way To Shop Online Powered By <span className="bg-gradient-to-r from-green-400 to-emerald-300 bg-clip-text text-transparent">AI</span>
-          </h1>
-          
-          <p className="text-gray-300 text-base md:text-lg max-w-md mx-auto lg:mx-0 font-medium">
-            Natural language search, personalized catalog curation, and automated budgeting models - custom tailored just for you.
-          </p>
-          
-          <div className="flex flex-col sm:flex-row items-center justify-center lg:justify-start gap-4 pt-2">
+          <div className="flex flex-col sm:flex-row items-center justify-center lg:justify-start gap-4">
             <Link to="/products">
-              <Button size="lg" className="bg-green-600 hover:bg-green-700 text-white rounded-full px-8 font-bold shadow-lg shadow-green-900/20 hover:scale-105 transition-transform py-6">
+              <Button size="lg" className="bg-green-600 hover:bg-green-700 text-white rounded-full px-8 font-bold shadow-lg shadow-green-900/20 hover:scale-105 transition-transform py-6 shrink-0">
                 Start Shopping <ArrowRight className="w-4.5 h-4.5 ml-2" />
               </Button>
             </Link>
             <a href="#hub">
-              <Button size="lg" variant="outline" className="rounded-full px-8 text-green-400 border-green-500/30 bg-transparent hover:bg-emerald-500/10 hover:text-white transition-all py-6">
+              <Button size="lg" variant="outline" className="rounded-full px-8 text-green-400 border-green-500/30 bg-transparent hover:bg-emerald-500/10 hover:text-white transition-all py-6 shrink-0">
                 Explore AI Hub
               </Button>
             </a>
           </div>
+
+          {/* Trust Badges */}
+          <div className="flex flex-wrap items-center gap-6 pt-6 border-t border-emerald-900/30 justify-center lg:justify-start">
+            <div className="flex items-center gap-2">
+              <div className="flex text-amber-400 gap-0.5 shrink-0">
+                <Star className="w-3.5 h-3.5 fill-amber-400 text-amber-400" />
+                <Star className="w-3.5 h-3.5 fill-amber-400 text-amber-400" />
+                <Star className="w-3.5 h-3.5 fill-amber-400 text-amber-400" />
+                <Star className="w-3.5 h-3.5 fill-amber-400 text-amber-400" />
+                <Star className="w-3.5 h-3.5 fill-amber-400 text-amber-400" />
+              </div>
+              <div className="text-left">
+                <p className="text-xs font-bold text-white">4.9/5 Rating</p>
+                <p className="text-[10px] text-gray-400 font-semibold leading-none mt-0.5">From 10k+ shoppers</p>
+              </div>
+            </div>
+            <div className="h-8 w-px bg-emerald-900/40 hidden sm:block"></div>
+            <div className="text-left">
+              <p className="text-xs font-bold text-white flex items-center gap-1">
+                <span className="w-1.5 h-1.5 rounded-full bg-green-500"></span> Secure Platform
+              </p>
+              <p className="text-[10px] text-gray-400 font-semibold leading-none mt-0.5">100% Encrypted Transactions</p>
+            </div>
+          </div>
         </div>
 
-        {/* Upgrade Hero Graphic: Embedded Conversational AI Assistant */}
-        <div className="lg:w-1/2 mt-12 lg:mt-0 flex justify-center z-10 w-full">
+        {/* Embedded Conversational AI Assistant (45%) */}
+        <div className="lg:w-[45%] z-10 w-full flex justify-center items-center">
           <div className="w-full max-w-md">
-            <AIChatBox containerHeight="h-[430px]" />
+            <AIChatBox containerHeight="h-[450px]" />
           </div>
         </div>
 
@@ -622,14 +693,14 @@ const Home = () => {
             <div 
               key={i}
               onClick={() => navigate(`/products?category=${cat.name}`)}
-              className="bg-white rounded-3xl border border-gray-100 shadow-sm hover:shadow-lg hover:border-green-200 transition-all duration-300 overflow-hidden cursor-pointer group flex flex-col justify-between h-56"
+              className="bg-white rounded-3xl border border-gray-100 shadow-sm hover:shadow-xl hover:border-green-300/80 hover:-translate-y-2 transition-all duration-300 ease-out overflow-hidden cursor-pointer group flex flex-col justify-between h-56"
             >
               {/* Category Image */}
               <div className="h-2/3 bg-gray-50 overflow-hidden relative">
                 <img 
                   src={cat.image} 
                   alt={cat.name} 
-                  className="object-cover h-full w-full group-hover:scale-105 transition-transform duration-300"
+                  className="object-cover h-full w-full group-hover:scale-110 transition-transform duration-500 ease-out"
                 />
                 <div className="absolute inset-0 bg-gradient-to-t from-gray-950/20 to-transparent"></div>
               </div>
@@ -690,80 +761,39 @@ const Home = () => {
             { value: "12,450+", label: "Products Curated" },
             { value: "98.4%", label: "Satisfaction Rate" }
           ].map((stat, i) => (
-            <div key={i} className="bg-white p-4 rounded-2xl border border-green-100/50 shadow-sm space-y-1">
-              <span className="text-xl md:text-2xl font-black text-green-700 block">{stat.value}</span>
+            <div key={i} className="bg-white p-4 rounded-2xl border border-green-100/50 shadow-sm hover:shadow-md hover:scale-[1.03] transition-all duration-300 space-y-1">
+              <span className="text-xl md:text-2xl font-black text-green-700 block">
+                <AnimatedCounter value={stat.value} />
+              </span>
               <span className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">{stat.label}</span>
             </div>
           ))}
         </div>
       </section>
 
-      {/* 6. Testimonials */}
-      <section className="space-y-6">
-        <h2 className="text-2xl font-black text-gray-900 text-center">What Our Customers Say</h2>
-        
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          {[
-            { name: "Aarav Mehta", role: "Software Engineer", comment: "The AI search is a game changer. I typed 'gaming laptop for students under 1.5L' and got matches with detailed custom reasoning instantly!", avatar: "AM", stars: 5 },
-            { name: "Neha Sharma", role: "Graphic Designer", comment: "The Budget Assistant allowed me to decorate my home office with beautiful items within my target limit. Extremely useful tool!", avatar: "NS", stars: 5 },
-            { name: "Rahul Verma", role: "Business Lead", comment: "Personalized picks recommended organic coffee and snacks that I love. The checkout is quick, and shipping is reliably fast.", avatar: "RV", stars: 4 }
-          ].map((test, i) => (
-            <Card key={i} className="border-gray-100 rounded-3xl shadow-sm bg-white overflow-hidden">
-              <CardContent className="p-6 space-y-4 text-left">
-                {/* Stars */}
-                <div className="flex text-amber-400 gap-0.5">
-                  {Array.from({ length: 5 }).map((_, idx) => (
-                    <Star 
-                      key={idx} 
-                      className={`w-4 h-4 ${idx < test.stars ? 'fill-amber-400 text-amber-400' : 'text-gray-200'}`} 
-                    />
-                  ))}
-                </div>
-                
-                <p className="text-xs sm:text-sm text-gray-600 leading-relaxed italic">
-                  "{test.comment}"
-                </p>
+      {/* Premium Ready to Experience AI Shopping CTA */}
+      <section className="bg-gradient-to-tr from-green-950 via-emerald-950 to-gray-950 text-white rounded-[2rem] p-12 md:p-16 text-center border border-emerald-900/30 shadow-2xl relative overflow-hidden">
+        {/* Glow Effects */}
+        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[500px] h-[500px] bg-green-500/10 rounded-full blur-3xl pointer-events-none"></div>
+        <div className="absolute bottom-0 right-0 w-80 h-80 bg-emerald-500/5 rounded-full blur-3xl pointer-events-none"></div>
 
-                <div className="flex items-center gap-3 pt-2 border-t border-gray-50">
-                  <div className="w-9 h-9 rounded-full bg-green-100 text-green-700 flex items-center justify-center font-bold text-xs shrink-0">
-                    {test.avatar}
-                  </div>
-                  <div>
-                    <h4 className="font-extrabold text-xs text-gray-800">{test.name}</h4>
-                    <p className="text-[10px] text-gray-400 font-medium">{test.role}</p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-      </section>
-
-      {/* 7. Newsletter Section */}
-      <section className="bg-gradient-to-tr from-green-900 to-emerald-950 text-white rounded-3xl p-8 md:p-12 text-center border border-emerald-800/40 relative overflow-hidden">
-        {/* Glow */}
-        <div className="absolute top-0 left-0 w-72 h-72 bg-emerald-500/10 rounded-full blur-3xl -ml-20 -mt-20"></div>
-
-        <div className="max-w-md mx-auto space-y-4 z-10 relative">
-          <Mail className="w-10 h-10 text-emerald-400 mx-auto animate-bounce" />
-          <h2 className="text-2xl font-black">Subscribe to AI Shopping Tips</h2>
-          <p className="text-emerald-100 text-xs sm:text-sm">
-            Receive updates on premium product launches, budget hacks, and curated custom suggestions direct to your inbox.
+        <div className="max-w-2xl mx-auto space-y-6 z-10 relative">
+          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs font-bold uppercase tracking-wider">
+            <Sparkles className="w-3.5 h-3.5 text-emerald-400 animate-pulse" /> Next-Gen E-Commerce
+          </div>
+          <h2 className="text-3xl md:text-5xl font-black tracking-tight leading-tight">
+            Ready to Experience <span className="bg-gradient-to-r from-green-400 to-emerald-300 bg-clip-text text-transparent">AI Shopping</span>?
+          </h2>
+          <p className="text-gray-300 text-sm md:text-base leading-relaxed font-medium">
+            Discover smarter shopping using AI-powered recommendations, conversational shopping assistance, budget intelligence, and personalized product discovery.
           </p>
-          <form 
-            onSubmit={(e) => { e.preventDefault(); toast.success('Subscribed successfully!'); }} 
-            className="flex flex-col sm:flex-row gap-2 pt-2"
-          >
-            <Input 
-              type="email" 
-              placeholder="Enter your email address" 
-              className="bg-white/10 border-white/20 text-white placeholder-white/50 rounded-xl"
-              required 
-            />
-            <Button type="submit" className="bg-emerald-500 hover:bg-emerald-600 text-white font-bold rounded-xl px-6">
-              Subscribe
-            </Button>
-          </form>
+          <div className="pt-4 flex justify-center">
+            <Link to="/products">
+              <Button size="lg" className="bg-green-600 hover:bg-green-700 text-white rounded-full px-10 font-bold shadow-lg shadow-green-950/50 hover:scale-105 transition-all duration-300 py-6">
+                Start Shopping <ArrowRight className="w-4.5 h-4.5 ml-2" />
+              </Button>
+            </Link>
+          </div>
         </div>
       </section>
 

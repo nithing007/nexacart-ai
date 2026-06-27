@@ -158,7 +158,7 @@ const AIChatBox = ({ onClose, containerHeight = "h-[450px]" }) => {
   };
 
   return (
-    <div className={`flex flex-col bg-white/80 backdrop-blur-md border border-gray-100 rounded-3xl shadow-xl w-full ${containerHeight} overflow-hidden transition-all duration-300 relative`}>
+    <div className={`flex flex-col bg-white/70 backdrop-blur-xl border border-white/20 rounded-[2rem] shadow-[0_20px_50px_rgba(8,112,65,0.05)] hover:shadow-[0_20px_50px_rgba(8,112,65,0.08)] w-full ${containerHeight} overflow-hidden transition-all duration-500 relative`}>
       <ChatHeader onClose={onClose} />
 
       {/* Message List Area */}

@@ -15,9 +15,19 @@ const ChatHeader = ({ onClose }) => {
             NexaCart AI Assistant
             <Sparkles className="w-3.5 h-3.5 text-emerald-400 fill-emerald-400 animate-pulse" />
           </h3>
-          <p className="text-[10px] text-emerald-300 font-medium mt-1 leading-none">
-            Your Personal Shopping Assistant
-          </p>
+          <div className="flex items-center gap-2 mt-1.5 leading-none">
+            <p className="text-[10px] text-emerald-300 font-medium leading-none">
+              Your Personal Shopping Assistant
+            </p>
+            <span className="w-1 h-1 rounded-full bg-emerald-400/50"></span>
+            <div className="flex items-center gap-1">
+              <span className="relative flex h-1.5 w-1.5">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-500"></span>
+              </span>
+              <span className="text-[8px] text-emerald-400 font-black uppercase tracking-wider">Online</span>
+            </div>
+          </div>
         </div>
       </div>
 

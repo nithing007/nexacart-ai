@@ -18,7 +18,7 @@ const ChatInput = ({ onSendMessage, disabled }) => {
 
   return (
     <form onSubmit={handleSubmit} className="flex items-center gap-2">
-      <div className="relative flex-grow flex items-center bg-gray-50 border border-gray-100 rounded-full focus-within:border-green-500 focus-within:bg-white focus-within:ring-2 focus-within:ring-green-500/10 transition-all shadow-inner pl-4 pr-1.5 py-1">
+      <div className="relative flex-grow flex items-center bg-gray-50/80 border border-gray-200/80 rounded-full focus-within:border-green-500 focus-within:bg-white focus-within:ring-4 focus-within:ring-green-500/10 focus-within:shadow-md transition-all duration-300 pl-4 pr-1.5 py-1">
         <input
           type="text"
           value={text}

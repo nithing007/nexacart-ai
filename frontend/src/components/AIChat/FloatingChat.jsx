@@ -44,9 +44,23 @@ const FloatingChat = () => {
         onClick={() => setIsOpen(!isOpen)}
         onMouseEnter={() => setShowTooltip(true)}
         onMouseLeave={() => setShowTooltip(false)}
-        whileHover={{ scale: 1.08 }}
+        whileHover={{ scale: 1.12 }}
         whileTap={{ scale: 0.94 }}
-        className="w-14 h-14 rounded-full bg-gradient-to-tr from-green-600 via-green-600 to-emerald-500 text-white flex items-center justify-center shadow-2xl hover:shadow-green-500/25 cursor-pointer relative border border-green-400/20"
+        animate={{
+          boxShadow: [
+            "0 0 15px rgba(16, 185, 129, 0.4)",
+            "0 0 25px rgba(16, 185, 129, 0.7)",
+            "0 0 15px rgba(16, 185, 129, 0.4)"
+          ]
+        }}
+        transition={{
+          boxShadow: {
+            duration: 2,
+            repeat: Infinity,
+            ease: "easeInOut"
+          }
+        }}
+        className="w-14 h-14 rounded-full bg-gradient-to-tr from-green-600 via-green-600 to-emerald-500 text-white flex items-center justify-center cursor-pointer relative border border-green-400/20"
         aria-label="Toggle Shopping Assistant"
       >
         <AnimatePresence mode="wait">
@@ -70,11 +84,13 @@ const FloatingChat = () => {
               transition={{ duration: 0.15 }}
               className="flex items-center justify-center"
             >
-              <MessageSquareCode className="w-6 h-6 animate-pulse-subtle" />
-              {/* Pulsing indicator badge */}
-              <span className="absolute -top-0.5 -right-0.5 flex h-3.5 w-3.5">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                <span className="relative inline-flex rounded-full h-3.5 w-3.5 bg-emerald-500 border-2 border-green-600"></span>
+              <MessageSquareCode className="w-6 h-6" />
+              {/* Unread notification badge */}
+              <span className="absolute -top-1.5 -right-1.5 flex h-5 w-5">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-5 w-5 bg-red-500 border border-white text-[9px] font-black text-white items-center justify-center shadow-sm select-none">
+                  1
+                </span>
               </span>
             </motion.div>
           )}
