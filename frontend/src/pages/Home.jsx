@@ -4,8 +4,8 @@ import { Link, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   Sparkles, Wallet, Search, ArrowRight, CheckCircle2, 
-  Mail, Plus, Heart, ShoppingCart, Star, HelpCircle, 
-  TrendingUp, Percent, ChevronRight 
+  Mail, Heart, ShoppingCart, Star, 
+  TrendingUp, ChevronRight 
 } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { Card, CardContent } from '../components/ui/card';
@@ -13,6 +13,7 @@ import { Input } from '../components/ui/input';
 import { addToCart } from '../redux/slices/cartSlice';
 import { addToWishlist, removeFromWishlist } from '../redux/slices/wishlistSlice';
 import { getFallbackImage } from '../utils/imageHelper';
+import AIChatBox from '../components/AIChat/AIChatBox';
 import api from '../services/api';
 import toast from 'react-hot-toast';
 
@@ -48,24 +49,27 @@ const Home = () => {
     { name: 'Fashion', count: '2,150+ Items', image: 'https://images.unsplash.com/photo-1483985988355-763728e1935b?auto=format&fit=crop&w=300&q=80', color: 'from-pink-500 to-rose-600' }
   ];
 
-  // Auto-fetch personalized picks on tab select or login state
-  useEffect(() => {
-    if (activeHubTab === 'picks' && isAuthenticated) {
-      fetchPersonalizedPicks();
-    }
-  }, [activeHubTab, isAuthenticated]);
-
   const fetchPersonalizedPicks = async () => {
     setPicksLoading(true);
     try {
       const res = await api.get('/ai/recommendations');
       setPersonalizedPicks(res.data);
-    } catch (err) {
+    } catch {
       toast.error('Failed to retrieve personalized recommendations');
     } finally {
       setPicksLoading(false);
     }
   };
+
+  // Auto-fetch personalized picks on tab select or login state
+  useEffect(() => {
+    if (activeHubTab === 'picks' && isAuthenticated) {
+      const timer = setTimeout(() => {
+        fetchPersonalizedPicks();
+      }, 0);
+      return () => clearTimeout(timer);
+    }
+  }, [activeHubTab, isAuthenticated]);
 
   const handleSmartSearch = async (e) => {
     if (e) e.preventDefault();
@@ -78,7 +82,7 @@ const Home = () => {
     try {
       const res = await api.get(`/ai/smart-search?q=${encodeURIComponent(searchQuery)}`);
       setSearchResults(res.data);
-    } catch (err) {
+    } catch {
       toast.error('AI Search failed to generate recommendations');
     } finally {
       setSearchLoading(false);
@@ -97,7 +101,7 @@ const Home = () => {
     try {
       const res = await api.post('/ai/budget-assistant', { budget: amount, category: budgetCat });
       setBudgetResults(res.data);
-    } catch (err) {
+    } catch {
       toast.error('Budget analysis failed');
     } finally {
       setBudgetLoading(false);
@@ -175,75 +179,10 @@ const Home = () => {
           </div>
         </div>
 
-        {/* Upgrade Hero Graphic: Interactive Dashboard Visualizer */}
+        {/* Upgrade Hero Graphic: Embedded Conversational AI Assistant */}
         <div className="lg:w-1/2 mt-12 lg:mt-0 flex justify-center z-10 w-full">
-          <div className="relative w-full max-w-md bg-gray-950/60 backdrop-blur-md rounded-3xl p-6 border border-emerald-900/30 shadow-2xl relative">
-            
-            {/* Glowing Border Background */}
-            <div className="absolute inset-0 bg-gradient-to-tr from-green-500/10 to-transparent rounded-3xl pointer-events-none"></div>
-
-            <div className="flex items-center justify-between border-b border-emerald-900/40 pb-4 mb-4">
-              <div className="flex items-center gap-2">
-                <div className="w-3.5 h-3.5 rounded-full bg-red-500/80"></div>
-                <div className="w-3.5 h-3.5 rounded-full bg-yellow-500/80"></div>
-                <div className="w-3.5 h-3.5 rounded-full bg-green-500/80"></div>
-              </div>
-              <span className="text-[10px] text-emerald-400 uppercase tracking-widest font-black flex items-center gap-1.5">
-                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping"></span> AI Engine Live
-              </span>
-            </div>
-
-            <div className="space-y-4">
-              {/* Visual Card 1: AI Search query */}
-              <div className="bg-emerald-950/30 p-3 rounded-2xl border border-emerald-900/20 flex items-start gap-2.5">
-                <Search className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
-                <div className="text-left space-y-1">
-                  <p className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">Natural Search query</p>
-                  <p className="text-xs text-white font-medium">"Best noise cancelling headphones under ₹30000"</p>
-                </div>
-              </div>
-
-              {/* Visual Card 2: AI recommendations card preview */}
-              <div className="bg-gray-900/90 p-4 rounded-2xl border border-emerald-900/20 flex items-center justify-between shadow-lg">
-                <div className="flex items-center gap-3">
-                  <div className="w-12 h-12 bg-emerald-900/20 rounded-xl p-1.5 flex items-center justify-center border border-emerald-800/20 shrink-0">
-                    <img 
-                      src="https://images.unsplash.com/photo-1505740420928-5e560c06d30e?auto=format&fit=crop&w=150&q=80" 
-                      alt="Sony XM5" 
-                      className="object-contain max-h-full rounded"
-                    />
-                  </div>
-                  <div className="text-left">
-                    <p className="text-xs font-bold text-white line-clamp-1">Sony WH-1000XM5</p>
-                    <div className="flex text-amber-400 gap-0.5 pt-0.5">
-                      <Star className="w-3 h-3 fill-amber-400 text-amber-400" />
-                      <span className="text-[9px] text-gray-400 font-semibold">(4.7)</span>
-                    </div>
-                  </div>
-                </div>
-                <div className="text-right">
-                  <div className="text-xs font-black text-emerald-400">₹29,990</div>
-                  <span className="text-[9px] text-red-400 font-bold line-through">₹34,990</span>
-                </div>
-              </div>
-
-              {/* Floating Badge */}
-              <div className="absolute -top-6 -right-6 bg-gradient-to-tr from-green-500 to-emerald-400 text-gray-950 text-xs font-black p-3.5 rounded-2xl shadow-lg border border-emerald-300/40 rotate-12 flex items-center gap-1.5 animate-bounce">
-                <Sparkles className="w-4 h-4" /> 14% OFF
-              </div>
-
-              {/* Micro graph representing smart budget */}
-              <div className="bg-gray-900/50 p-3 rounded-2xl border border-emerald-900/10 space-y-1">
-                <div className="flex justify-between text-[9px] text-gray-400 font-bold">
-                  <span>Smart Budgeting Limit</span>
-                  <span className="text-emerald-400">₹29,990 / ₹35,000</span>
-                </div>
-                <div className="w-full bg-gray-950 rounded-full h-1.5 overflow-hidden">
-                  <div className="bg-emerald-500 h-full w-[85%] rounded-full"></div>
-                </div>
-              </div>
-            </div>
-            
+          <div className="w-full max-w-md">
+            <AIChatBox containerHeight="h-[430px]" />
           </div>
         </div>
 
@@ -682,7 +621,7 @@ const Home = () => {
           {categoriesList.map((cat, i) => (
             <div 
               key={i}
-              onClick={() => handleCategoryChange ? handleCategoryChange(cat.name) : navigate(`/products?category=${cat.name}`)}
+              onClick={() => navigate(`/products?category=${cat.name}`)}
               className="bg-white rounded-3xl border border-gray-100 shadow-sm hover:shadow-lg hover:border-green-200 transition-all duration-300 overflow-hidden cursor-pointer group flex flex-col justify-between h-56"
             >
               {/* Category Image */}
@@ -748,7 +687,7 @@ const Home = () => {
         <div className="flex-1 grid grid-cols-3 gap-4 text-center">
           {[
             { value: "₹1,850", label: "Avg. Monthly Savings" },
-            { value: "12,450+", label: "Products Crated" },
+            { value: "12,450+", label: "Products Curated" },
             { value: "98.4%", label: "Satisfaction Rate" }
           ].map((stat, i) => (
             <div key={i} className="bg-white p-4 rounded-2xl border border-green-100/50 shadow-sm space-y-1">

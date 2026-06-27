@@ -2,7 +2,6 @@ import { useState, useEffect, useRef } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useSelector, useDispatch } from 'react-redux';
 import { ShoppingCart, User, Search, Heart, Wallet, LogOut, ChevronDown } from 'lucide-react';
-import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { logout } from '../redux/slices/authSlice';
 
@@ -49,8 +48,11 @@ const Navbar = () => {
         
         {/* Logo and Brand */}
         <div className="flex items-center justify-between w-full md:w-auto">
-          <Link to="/" className="flex items-center gap-2">
-            <img src="/logo.png" alt="NexaCart AI" className="h-10 w-auto object-contain" />
+          <Link to="/" className="flex items-center gap-2.5 group">
+            <img src="/logo.png" alt="NexaCart AI" className="h-10 w-auto object-contain transition-transform group-hover:scale-105 duration-200" />
+            <span className="font-black text-xl tracking-tight text-gray-900 flex items-center gap-1 select-none">
+              NexaCart<span className="bg-gradient-to-r from-green-600 to-emerald-500 bg-clip-text text-transparent">AI</span>
+            </span>
           </Link>
           
           {/* Cart & Heart icons for mobile */}
