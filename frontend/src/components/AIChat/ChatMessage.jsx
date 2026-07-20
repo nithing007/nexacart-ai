@@ -50,7 +50,7 @@ const ChatMessage = ({ message }) => {
   if (isUser) {
     return (
       <div className="flex justify-end w-full">
-        <div className="bg-gradient-to-tr from-green-600 to-emerald-700 text-white rounded-2xl rounded-tr-none px-4 py-2.5 max-w-[85%] shadow-md text-xs font-medium leading-relaxed">
+        <div className="bg-gradient-to-tr from-emerald-600 to-green-600 text-white rounded-2xl rounded-tr-none px-4 py-2.5 max-w-[85%] shadow-md text-xs font-semibold leading-relaxed">
           {message.text}
         </div>
       </div>
@@ -60,15 +60,15 @@ const ChatMessage = ({ message }) => {
   // Assistant message formatting
   return (
     <div className="flex gap-2.5 items-start w-full">
-      <div className="w-7 h-7 rounded-full bg-gradient-to-tr from-green-800 to-emerald-950 text-white flex items-center justify-center text-xs shrink-0 select-none shadow-sm mt-0.5">
+      <div className="w-7 h-7 rounded-full bg-gradient-to-tr from-emerald-500 to-green-700 text-white flex items-center justify-center text-xs shrink-0 select-none shadow-sm mt-0.5">
         🤖
       </div>
       <div className="flex-1 space-y-3 max-w-[90%]">
-        <div className="bg-white border border-gray-100 rounded-2xl rounded-tl-none px-4 py-3 shadow-sm text-xs text-gray-800 leading-relaxed space-y-2">
+        <div className="bg-white/95 border border-white/20 rounded-2xl rounded-tl-none px-4 py-3 shadow-md text-xs text-gray-900 leading-relaxed space-y-2">
           {message.text && <p className="whitespace-pre-line">{message.text}</p>}
           
           {message.reasoning && (
-            <div className="bg-emerald-50/50 border border-emerald-100 rounded-xl p-3 space-y-1 mt-1 text-[11px] text-emerald-900">
+            <div className="bg-emerald-50/80 border border-emerald-100/50 rounded-xl p-3 space-y-1 mt-1 text-[11px] text-emerald-900">
               <span className="font-extrabold text-[10px] text-emerald-800 tracking-wide uppercase flex items-center gap-1">
                 <Sparkles className="w-3 h-3 text-emerald-600" /> AI Insights
               </span>
@@ -77,7 +77,7 @@ const ChatMessage = ({ message }) => {
           )}
 
           {message.recommendations && (
-            <p className="text-[11px] text-gray-500 font-semibold border-t border-gray-50 pt-1.5 mt-1.5">
+            <p className="text-[11px] text-gray-500 font-semibold border-t border-gray-100 pt-1.5 mt-1.5">
               💡 Suggestion: {message.recommendations}
             </p>
           )}

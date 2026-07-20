@@ -158,7 +158,7 @@ const AIChatBox = ({ onClose, containerHeight = "h-[450px]" }) => {
   };
 
   return (
-    <div className={`flex flex-col bg-white/70 backdrop-blur-xl border border-white/20 rounded-[2rem] shadow-[0_20px_50px_rgba(8,112,65,0.05)] hover:shadow-[0_20px_50px_rgba(8,112,65,0.08)] w-full ${containerHeight} overflow-hidden transition-all duration-500 relative`}>
+    <div className={`flex flex-col bg-neutral-900/60 backdrop-blur-xl border border-emerald-950/30 rounded-[2rem] shadow-[0_20px_50px_rgba(0,0,0,0.3)] hover:shadow-[0_20px_50px_rgba(16,185,129,0.08)] w-full ${containerHeight} overflow-hidden transition-all duration-500 relative`}>
       <ChatHeader onClose={onClose} />
 
       {/* Message List Area */}
@@ -193,7 +193,7 @@ const AIChatBox = ({ onClose, containerHeight = "h-[450px]" }) => {
       </div>
 
       {/* Footer controls & Input area */}
-      <div className="p-3.5 border-t border-gray-100/80 bg-white/95 rounded-b-3xl space-y-2">
+      <div className="p-3.5 border-t border-white/5 bg-neutral-950/60 backdrop-blur-md rounded-b-[2rem] space-y-2">
         <div className="flex items-center justify-between text-[9px] text-gray-400 font-bold px-1.5">
           <span className="flex items-center gap-1">
             <Sparkles className="w-3 h-3 text-green-500" /> Powered by Gemini AI

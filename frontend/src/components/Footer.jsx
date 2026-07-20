@@ -10,22 +10,22 @@ const Footer = () => {
         <div className="grid grid-cols-1 md:grid-cols-3 gap-12 pb-12 border-b border-gray-100">
           
           {/* Left Column */}
-          <div className="space-y-4 text-left">
-            <div className="flex items-center gap-2">
+          <div className="space-y-4 text-center md:text-left">
+            <div className="flex items-center justify-center md:justify-start gap-2">
               <img src="/logo.png" alt="NexaCart AI" className="h-9 w-auto object-contain" />
               <span className="font-black text-lg tracking-tight text-gray-900">
                 NexaCart<span className="bg-gradient-to-r from-green-600 to-emerald-500 bg-clip-text text-transparent ml-0.5">AI</span>
               </span>
             </div>
-            <p className="text-gray-500 text-xs leading-relaxed max-w-sm">
+            <p className="text-gray-500 text-xs leading-relaxed max-w-sm mx-auto md:mx-0">
               AI-Powered Conversational E-Commerce Platform that helps users discover products through natural conversations, personalized recommendations, and intelligent shopping assistance.
             </p>
-            <div className="flex items-center gap-3 pt-2">
+            <div className="flex items-center justify-center md:justify-start gap-3 pt-2">
               <a 
                 href="https://github.com" 
                 target="_blank" 
                 rel="noopener noreferrer" 
-                className="p-2 rounded-full bg-gray-50 text-gray-400 hover:text-green-600 hover:bg-green-50 transition-colors"
+                className="p-2 rounded-full bg-gray-55 text-gray-400 hover:text-green-600 hover:bg-green-50 transition-colors"
                 title="GitHub"
               >
                 <FaGithub className="w-4 h-4" />
@@ -34,7 +34,7 @@ const Footer = () => {
                 href="https://linkedin.com" 
                 target="_blank" 
                 rel="noopener noreferrer" 
-                className="p-2 rounded-full bg-gray-50 text-gray-400 hover:text-green-600 hover:bg-green-50 transition-colors"
+                className="p-2 rounded-full bg-gray-55 text-gray-400 hover:text-green-600 hover:bg-green-50 transition-colors"
                 title="LinkedIn"
               >
                 <FaLinkedin className="w-4 h-4" />
@@ -43,7 +43,7 @@ const Footer = () => {
                 href="https://instagram.com" 
                 target="_blank" 
                 rel="noopener noreferrer" 
-                className="p-2 rounded-full bg-gray-50 text-gray-400 hover:text-green-600 hover:bg-green-50 transition-colors"
+                className="p-2 rounded-full bg-gray-55 text-gray-400 hover:text-green-600 hover:bg-green-50 transition-colors"
                 title="Instagram"
               >
                 <FaInstagram className="w-4 h-4" />
@@ -52,9 +52,9 @@ const Footer = () => {
           </div>
 
           {/* Middle Column */}
-          <div className="space-y-4 text-left">
+          <div className="space-y-4 text-center md:text-left">
             <h4 className="font-bold text-gray-800 text-xs tracking-wider uppercase">Quick Links</h4>
-            <div className="grid grid-cols-2 gap-2 text-xs">
+            <div className="grid grid-cols-2 gap-2 text-xs text-center md:text-left max-w-[260px] mx-auto md:mx-0">
               <Link to="/" className="text-gray-500 hover:text-green-600 transition-colors">Home</Link>
               <Link to="/products" className="text-gray-500 hover:text-green-600 transition-colors">Shop Products</Link>
               <a href="/#hub" className="text-gray-500 hover:text-green-600 transition-colors">AI Assistant</a>
@@ -66,18 +66,18 @@ const Footer = () => {
           </div>
 
           {/* Right Column */}
-          <div className="space-y-4 text-left">
-            <h4 className="font-bold text-gray-800 text-xs tracking-wider uppercase">Contact</h4>
-            <div className="space-y-3 text-xs text-gray-500">
-              <div className="flex items-start gap-2.5">
-                <MapPin className="w-4 h-4 text-green-600 shrink-0 mt-0.5" />
-                <span>Coimbatore,<br />Tamil Nadu,<br />India</span>
+          <div className="space-y-4 text-center md:text-left flex flex-col items-center md:items-start">
+            <h4 className="font-bold text-gray-800 text-xs tracking-wider uppercase w-full">Contact</h4>
+            <div className="space-y-3 text-xs text-gray-500 w-full flex flex-col items-center md:items-start">
+              <div className="flex flex-row items-center justify-center md:justify-start gap-2.5 text-center md:text-left">
+                <MapPin className="w-4 h-4 text-green-600 shrink-0" />
+                <span className="leading-relaxed">Coimbatore, Tamil Nadu, India</span>
               </div>
-              <div className="flex items-center gap-2.5">
+              <div className="flex flex-row items-center justify-center md:justify-start gap-2 text-center md:text-left">
                 <Mail className="w-4 h-4 text-green-600 shrink-0" />
                 <a href="mailto:support@nexacart.ai" className="hover:text-green-600 transition-colors">support@nexacart.ai</a>
               </div>
-              <div className="flex items-center gap-2.5">
+              <div className="flex flex-row items-center justify-center md:justify-start gap-2 text-center md:text-left">
                 <Phone className="w-4 h-4 text-green-600 shrink-0" />
                 <a href="tel:+91XXXXX XXXXX" className="hover:text-green-600 transition-colors">+91 XXXXX XXXXX</a>
               </div>

@@ -18,20 +18,20 @@ const ChatInput = ({ onSendMessage, disabled }) => {
 
   return (
     <form onSubmit={handleSubmit} className="flex items-center gap-2">
-      <div className="relative flex-grow flex items-center bg-gray-50/80 border border-gray-200/80 rounded-full focus-within:border-green-500 focus-within:bg-white focus-within:ring-4 focus-within:ring-green-500/10 focus-within:shadow-md transition-all duration-300 pl-4 pr-1.5 py-1">
+      <div className="relative flex-grow flex items-center bg-white/5 border border-white/10 rounded-full focus-within:border-emerald-500 focus-within:bg-white/10 focus-within:ring-4 focus-within:ring-emerald-500/10 focus-within:shadow-md transition-all duration-300 pl-4 pr-1.5 py-1">
         <input
           type="text"
           value={text}
           onChange={(e) => setText(e.target.value)}
           placeholder="Ask anything..."
           disabled={disabled}
-          className="w-full bg-transparent border-none text-xs text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-0 disabled:cursor-not-allowed py-1.5"
+          className="w-full bg-transparent border-none text-xs text-white placeholder-gray-400 focus:outline-none focus:ring-0 disabled:cursor-not-allowed py-1.5"
         />
         <button
           type="button"
           onClick={handleMicClick}
           disabled={disabled}
-          className="p-1.5 text-gray-400 hover:text-green-600 rounded-full hover:bg-gray-100/80 transition-colors"
+          className="p-1.5 text-gray-400 hover:text-emerald-400 rounded-full hover:bg-white/5 transition-colors"
           title="Voice Search"
         >
           <Mic className="w-4 h-4" />
@@ -40,7 +40,7 @@ const ChatInput = ({ onSendMessage, disabled }) => {
       <button
         type="submit"
         disabled={disabled || !text.trim()}
-        className="h-9 w-9 rounded-full bg-gradient-to-tr from-green-600 to-emerald-500 text-white flex items-center justify-center shadow-md hover:scale-105 active:scale-95 disabled:opacity-50 disabled:pointer-events-none transition-all duration-150 shrink-0"
+        className="h-9 w-9 rounded-full bg-gradient-to-tr from-emerald-600 to-green-500 text-white flex items-center justify-center shadow-md hover:scale-105 active:scale-95 disabled:opacity-50 disabled:pointer-events-none transition-all duration-150 shrink-0"
         title="Send Message"
       >
         <Send className="w-3.5 h-3.5 fill-white text-emerald-600 ml-0.5" />

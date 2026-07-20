@@ -15,6 +15,9 @@ const Navbar = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const dropdownRef = useRef(null);
+  
+  const [dropdownOpenMobile, setDropdownOpenMobile] = useState(false);
+  const dropdownRefMobile = useRef(null);
 
   const cartItemsCount = items.reduce((sum, item) => sum + item.quantity, 0);
 
@@ -22,6 +25,9 @@ const Navbar = () => {
     const handleClickOutside = (event) => {
       if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
         setDropdownOpen(false);
+      }
+      if (dropdownRefMobile.current && !dropdownRefMobile.current.contains(event.target)) {
+        setDropdownOpenMobile(false);
       }
     };
     document.addEventListener('mousedown', handleClickOutside);
@@ -55,24 +61,119 @@ const Navbar = () => {
             </span>
           </Link>
           
-          {/* Cart & Heart icons for mobile */}
-          <div className="flex md:hidden items-center gap-4">
-            <Link to="/wishlist" className="text-gray-600 hover:text-green-600 relative">
-              <Heart className="w-6 h-6" />
+          {/* Cart & Heart & Shop & Profile dropdown for mobile */}
+          <div className="flex md:hidden items-center gap-3">
+            {/* Shop Products Link (hidden in desktop, visible left of wishlist in mobile) */}
+            <Link to="/products" className="text-xs font-black text-emerald-700 hover:text-emerald-800 transition-colors px-2.5 py-1.5 bg-emerald-50 rounded-lg hover:bg-emerald-100">
+              Shop
+            </Link>
+
+            <Link to="/wishlist" className="text-gray-600 hover:text-green-600 relative p-1.5">
+              <Heart className="w-5.5 h-5.5" />
               {wishlistProducts.length > 0 && (
-                <span className="absolute -top-1 -right-2 bg-red-500 text-white text-[10px] w-4 h-4 rounded-full flex items-center justify-center font-bold">
+                <span className="absolute top-0 right-0 bg-red-500 text-white text-[9px] w-4 h-4 rounded-full flex items-center justify-center font-bold">
                   {wishlistProducts.length}
                 </span>
               )}
             </Link>
-            <Link to="/cart" className="text-gray-600 hover:text-green-600 relative">
-              <ShoppingCart className="w-6 h-6" />
+            
+            <Link to="/cart" className="text-gray-600 hover:text-green-600 relative p-1.5">
+              <ShoppingCart className="w-5.5 h-5.5" />
               {cartItemsCount > 0 && (
-                <span className="absolute -top-1 -right-2 bg-green-500 text-white text-[10px] w-4 h-4 rounded-full flex items-center justify-center font-bold">
+                <span className="absolute top-0 right-0 bg-green-500 text-white text-[9px] w-4 h-4 rounded-full flex items-center justify-center font-bold">
                   {cartItemsCount}
                 </span>
               )}
             </Link>
+
+            {/* Profile Dropdown for mobile */}
+            <div className="relative pl-1 flex-shrink-0" ref={dropdownRefMobile}>
+              <button
+                onClick={() => setDropdownOpenMobile(!dropdownOpenMobile)}
+                className="flex items-center justify-center gap-1 focus:outline-none hover:bg-gray-50 p-1 rounded-full transition-all border border-gray-100 shadow-sm flex-shrink-0"
+              >
+                {isAuthenticated ? (
+                  <div className="w-7 h-7 rounded-full bg-green-600 text-white flex items-center justify-center text-[11px] font-bold shadow-sm flex-shrink-0">
+                    {user?.firstName ? user.firstName[0].toUpperCase() : 'U'}
+                  </div>
+                ) : (
+                  <div className="w-7 h-7 rounded-full bg-gray-100 text-gray-600 flex items-center justify-center text-[11px] font-bold flex-shrink-0">
+                    <User className="w-4 h-4" />
+                  </div>
+                )}
+                <ChevronDown className="w-3 h-3 text-gray-400 flex-shrink-0" />
+              </button>
+
+              {dropdownOpenMobile && (
+                <div className="absolute right-0 mt-2 w-52 bg-white rounded-xl shadow-xl border border-gray-100 py-1.5 z-50 animate-in fade-in slide-in-from-top-3 duration-200">
+                  {isAuthenticated ? (
+                    <>
+                      <div className="px-4 py-2 border-b border-gray-50">
+                        <p className="text-[9px] uppercase tracking-wider text-gray-400 font-bold">Signed in as</p>
+                        <p className="font-semibold text-gray-800 truncate text-[11px]">{user?.email}</p>
+                      </div>
+                      <Link
+                        to="/user/dashboard"
+                        onClick={() => setDropdownOpenMobile(false)}
+                        className="flex items-center gap-2 px-4 py-2 text-xs text-gray-700 hover:bg-green-50 hover:text-green-700 transition-colors"
+                      >
+                        <User className="w-3.5 h-3.5 text-gray-400" />
+                        <span>Profile</span>
+                      </Link>
+                      <Link
+                        to="/wishlist"
+                        onClick={() => setDropdownOpenMobile(false)}
+                        className="flex items-center gap-2 px-4 py-2 text-xs text-gray-700 hover:bg-green-50 hover:text-green-700 transition-colors"
+                      >
+                        <Heart className="w-3.5 h-3.5 text-gray-400" />
+                        <span>Wishlist</span>
+                      </Link>
+                      <Link
+                        to="/cart"
+                        onClick={() => setDropdownOpenMobile(false)}
+                        className="flex items-center gap-2 px-4 py-2 text-xs text-gray-700 hover:bg-green-50 hover:text-green-700 transition-colors"
+                      >
+                        <ShoppingCart className="w-3.5 h-3.5 text-gray-400" />
+                        <span>Cart</span>
+                      </Link>
+                      <hr className="my-1 border-gray-100" />
+                      <button
+                        onClick={() => {
+                          setDropdownOpenMobile(false);
+                          handleLogout();
+                        }}
+                        className="w-full text-left flex items-center gap-2 px-4 py-2 text-xs text-red-600 hover:bg-red-50 transition-colors"
+                      >
+                        <LogOut className="w-3.5 h-3.5 text-red-500" />
+                        <span>Log Out</span>
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <div className="px-4 py-2 border-b border-gray-50">
+                        <p className="text-[9px] uppercase tracking-wider text-gray-400 font-bold">Welcome to NexaCart</p>
+                      </div>
+                      <Link
+                        to="/login"
+                        onClick={() => setDropdownOpenMobile(false)}
+                        className="flex items-center gap-2 px-4 py-2 text-xs text-gray-700 hover:bg-green-50 hover:text-green-700 transition-colors"
+                      >
+                        <User className="w-3.5 h-3.5 text-gray-400" />
+                        <span>Log In</span>
+                      </Link>
+                      <Link
+                        to="/register"
+                        onClick={() => setDropdownOpenMobile(false)}
+                        className="flex items-center gap-2 px-4 py-2 text-xs text-green-600 hover:bg-green-50 hover:text-green-700 font-semibold transition-colors"
+                      >
+                        <User className="w-3.5 h-3.5 text-green-600" />
+                        <span>Sign Up</span>
+                      </Link>
+                    </>
+                  )}
+                </div>
+              )}
+            </div>
           </div>
         </div>
         
@@ -92,13 +193,13 @@ const Navbar = () => {
 
         {/* Action Links */}
         <div className="flex items-center gap-6 text-sm font-medium">
-          <Link to="/products" className="text-gray-600 hover:text-green-600 transition-colors">
+          <Link to="/products" className="hidden md:block text-gray-600 hover:text-green-600 transition-colors">
             Shop Products
           </Link>
           
           <Link to="/budget-assistant" className="flex items-center gap-1 text-gray-600 hover:text-green-600 transition-colors">
             <Wallet className="w-4 h-4 text-orange-500" />
-            <span className="hidden sm:inline">Budget Assistant</span>
+            <span className="inline">Budget Assistant</span>
           </Link>
 
           <Link to="/wishlist" className="hidden md:flex items-center gap-1 text-gray-600 hover:text-green-600 relative transition-colors">
@@ -122,7 +223,7 @@ const Navbar = () => {
           </Link>
 
           {/* Profile Dropdown Container */}
-          <div className="relative border-l border-gray-100 pl-4" ref={dropdownRef}>
+          <div className="hidden md:block relative border-l border-gray-100 pl-4" ref={dropdownRef}>
             <button
               onClick={() => setDropdownOpen(!dropdownOpen)}
               className="flex items-center gap-2 focus:outline-none hover:bg-gray-50 py-1.5 px-3 rounded-full transition-all border border-gray-100 shadow-sm"

@@ -24,8 +24,10 @@ const AnimatedCounter = ({ value, duration = 1500 }) => {
     const numericStr = value.replace(/[^0-9.]/g, '');
     const target = parseFloat(numericStr);
     if (isNaN(target)) {
-      setDisplayValue(value);
-      return;
+      const rafId = requestAnimationFrame(() => {
+        setDisplayValue(value);
+      });
+      return () => cancelAnimationFrame(rafId);
     }
 
     const isPercent = value.includes('%');
@@ -66,6 +68,10 @@ const Home = () => {
   const navigate = useNavigate();
   const { isAuthenticated } = useSelector((state) => state.auth);
   const { products: wishlistProducts } = useSelector((state) => state.wishlist);
+
+  useEffect(() => {
+    window.scrollTo({ top: 0, behavior: 'instant' });
+  }, []);
 
   // Active Tab for Smart Shopping Hub
   const [activeHubTab, setActiveHubTab] = useState('search');
@@ -115,22 +121,35 @@ const Home = () => {
     }
   }, [activeHubTab, isAuthenticated]);
 
+  const triggerSearch = async (queryText) => {
+    setSearchLoading(true);
+    try {
+      const res = await api.get(`/ai/smart-search?q=${encodeURIComponent(queryText)}`);
+      setSearchResults(res.data);
+      setActiveHubTab('search');
+      const hubElement = document.getElementById('hub');
+      if (hubElement) {
+        hubElement.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+    } catch {
+      toast.error('AI Search failed to generate recommendations');
+    } finally {
+      setSearchLoading(false);
+    }
+  };
+
   const handleSmartSearch = async (e) => {
     if (e) e.preventDefault();
     if (!searchQuery.trim()) {
       toast.error('Please enter a natural search query');
       return;
     }
+    triggerSearch(searchQuery);
+  };
 
-    setSearchLoading(true);
-    try {
-      const res = await api.get(`/ai/smart-search?q=${encodeURIComponent(searchQuery)}`);
-      setSearchResults(res.data);
-    } catch {
-      toast.error('AI Search failed to generate recommendations');
-    } finally {
-      setSearchLoading(false);
-    }
+  const handleSuggestionClick = (queryText) => {
+    setSearchQuery(queryText);
+    triggerSearch(queryText);
   };
 
   const handleBudgetAssistant = async (e) => {
@@ -189,72 +208,99 @@ const Home = () => {
     <div className="space-y-20 pb-12">
       
       {/* 1. Hero Section Redesign */}
-      <section className="bg-gradient-to-tr from-green-950 via-gray-900 to-emerald-950 rounded-[2rem] p-8 md:p-12 lg:p-16 flex flex-col lg:flex-row items-center justify-between gap-12 shadow-2xl border border-emerald-900/50 relative overflow-hidden">
+      <section className="bg-gradient-to-br from-green-950 via-neutral-950 to-black rounded-[28px] p-8 md:p-12 lg:p-16 flex flex-col items-center gap-8 md:gap-12 shadow-[0_20px_50px_rgba(8,112,65,0.15)] border border-emerald-900/30 relative overflow-hidden">
         
         {/* Animated Glow Backdrops */}
-        <div className="absolute top-0 right-0 w-80 h-80 bg-green-500/10 rounded-full blur-3xl -mr-20 -mt-20 pointer-events-none"></div>
-        <div className="absolute bottom-0 left-0 w-96 h-96 bg-emerald-500/5 rounded-full blur-3xl -ml-20 -mb-20 pointer-events-none"></div>
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[300px] bg-emerald-500/5 rounded-full blur-3xl pointer-events-none"></div>
+        <div className="absolute top-0 right-0 w-96 h-96 bg-emerald-500/10 rounded-full blur-[100px] -mr-20 -mt-20 pointer-events-none"></div>
+        <div className="absolute bottom-0 left-0 w-96 h-96 bg-green-500/10 rounded-full blur-[100px] -ml-20 -mb-20 pointer-events-none"></div>
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[300px] bg-emerald-500/5 rounded-full blur-[120px] pointer-events-none"></div>
 
-        {/* Text & Trust Badges Area (55%) */}
-        <div className="lg:w-[55%] space-y-8 z-10 text-center lg:text-left flex flex-col justify-center">
-          <div className="space-y-4">
-            <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs font-semibold shadow-inner w-fit mx-auto lg:mx-0">
-              <Sparkles className="w-3.5 h-3.5 animate-pulse" /> AI-Powered Shopping Platform
-            </div>
-            
-            <h1 className="text-4xl md:text-5xl lg:text-6xl font-black text-white leading-tight tracking-tight">
-              The Smartest Way To Shop Online Powered By <span className="bg-gradient-to-r from-green-400 to-emerald-300 bg-clip-text text-transparent">AI</span>
-            </h1>
-            
-            <p className="text-gray-300 text-base md:text-lg max-w-xl mx-auto lg:mx-0 font-medium leading-relaxed">
-              Natural language search, personalized catalog curation, and automated budgeting models - custom tailored just for you.
-            </p>
-          </div>
-          
-          <div className="flex flex-col sm:flex-row items-center justify-center lg:justify-start gap-4">
-            <Link to="/products">
-              <Button size="lg" className="bg-green-600 hover:bg-green-700 text-white rounded-full px-8 font-bold shadow-lg shadow-green-900/20 hover:scale-105 transition-transform py-6 shrink-0">
-                Start Shopping <ArrowRight className="w-4.5 h-4.5 ml-2" />
-              </Button>
-            </Link>
-            <a href="#hub">
-              <Button size="lg" variant="outline" className="rounded-full px-8 text-green-400 border-green-500/30 bg-transparent hover:bg-emerald-500/10 hover:text-white transition-all py-6 shrink-0">
-                Explore AI Hub
-              </Button>
-            </a>
-          </div>
-
-          {/* Trust Badges */}
-          <div className="flex flex-wrap items-center gap-6 pt-6 border-t border-emerald-900/30 justify-center lg:justify-start">
-            <div className="flex items-center gap-2">
-              <div className="flex text-amber-400 gap-0.5 shrink-0">
-                <Star className="w-3.5 h-3.5 fill-amber-400 text-amber-400" />
-                <Star className="w-3.5 h-3.5 fill-amber-400 text-amber-400" />
-                <Star className="w-3.5 h-3.5 fill-amber-400 text-amber-400" />
-                <Star className="w-3.5 h-3.5 fill-amber-400 text-amber-400" />
-                <Star className="w-3.5 h-3.5 fill-amber-400 text-amber-400" />
-              </div>
-              <div className="text-left">
-                <p className="text-xs font-bold text-white">4.9/5 Rating</p>
-                <p className="text-[10px] text-gray-400 font-semibold leading-none mt-0.5">From 10k+ shoppers</p>
-              </div>
-            </div>
-            <div className="h-8 w-px bg-emerald-900/40 hidden sm:block"></div>
-            <div className="text-left">
-              <p className="text-xs font-bold text-white flex items-center gap-1">
-                <span className="w-1.5 h-1.5 rounded-full bg-green-500"></span> Secure Platform
-              </p>
-              <p className="text-[10px] text-gray-400 font-semibold leading-none mt-0.5">100% Encrypted Transactions</p>
-            </div>
+        {/* Small Badge - Above both columns */}
+        <div className="w-full flex justify-center lg:justify-start z-10 pt-2 lg:pt-4">
+          <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs font-semibold shadow-inner hover:scale-105 transition-transform duration-300">
+            <Sparkles className="w-3.5 h-3.5 text-emerald-400 animate-pulse" /> AI-Powered Shopping Platform
           </div>
         </div>
 
-        {/* Embedded Conversational AI Assistant (45%) */}
-        <div className="lg:w-[45%] z-10 w-full flex justify-center items-center">
-          <div className="w-full max-w-md">
-            <AIChatBox containerHeight="h-[450px]" />
+        {/* Content Columns Wrapper */}
+        <div className="w-full flex flex-col lg:flex-row items-center justify-between gap-12 z-10">
+          
+          {/* Text & Search Area (Left Column - 55%) */}
+          <div className="lg:w-[55%] space-y-7 text-center lg:text-left flex flex-col justify-center items-center lg:items-start">
+            
+            {/* Large Headline */}
+            <h1 className="text-4xl md:text-5xl lg:text-6xl font-black text-white leading-[1.1] tracking-tight">
+              The Smartest Way <br className="hidden lg:block"/>To Shop Online <br />Powered By <span className="bg-gradient-to-r from-emerald-400 to-green-500 bg-clip-text text-transparent">AI</span>
+            </h1>
+            
+            {/* Description */}
+            <p className="text-gray-300 text-sm md:text-base max-w-xl mx-auto lg:mx-0 font-medium leading-relaxed">
+              Natural language search, personalized product recommendations, AI-powered shopping assistance, and intelligent budgeting — all tailored specifically for you.
+            </p>
+
+            {/* Search Bar */}
+            <form onSubmit={handleSmartSearch} className="relative w-full max-w-xl mx-auto lg:mx-0 z-20 group">
+              <div className="relative flex items-center">
+                <Search className="absolute left-4 w-5 h-5 text-emerald-500/80 group-focus-within:text-emerald-400 transition-colors" />
+                <input
+                  type="text"
+                  placeholder="Search for laptops, mobiles, groceries..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="w-full bg-white/5 border border-white/10 hover:border-emerald-500/30 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 text-white placeholder-gray-400 text-sm pl-12 pr-32 py-4 rounded-full transition-all duration-300 backdrop-blur-md shadow-inner"
+                />
+                <button
+                  type="submit"
+                  disabled={searchLoading}
+                  className="absolute right-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-full px-5 py-2.5 text-xs font-bold transition-all duration-300 disabled:opacity-50 flex items-center gap-1.5 shadow-md hover:scale-105 active:scale-95"
+                >
+                  {searchLoading ? 'Searching...' : (
+                    <>
+                      <span>Ask AI</span>
+                      <Sparkles className="w-3.5 h-3.5 animate-pulse" />
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
+
+            {/* Suggestion Chips */}
+            <div className="flex flex-wrap items-center justify-center lg:justify-start gap-2 max-w-xl">
+              {['Gaming Laptop', 'iPhone', 'Groceries', 'Shoes', 'Home Office', 'Budget Setup'].map((chip) => (
+                <button
+                  key={chip}
+                  type="button"
+                  onClick={() => handleSuggestionClick(chip)}
+                  className="px-3.5 py-1.5 bg-white/5 hover:bg-emerald-500/10 text-gray-300 hover:text-emerald-400 border border-white/10 hover:border-emerald-500/30 rounded-full text-xs font-semibold transition-all duration-300 hover:scale-105 hover:-translate-y-0.5"
+                >
+                  {chip}
+                </button>
+              ))}
+            </div>
+
+            {/* Buttons */}
+            <div className="flex flex-col sm:flex-row items-center justify-center lg:justify-start gap-4 w-full sm:w-auto">
+              <Link to="/products" className="w-full sm:w-auto">
+                <Button size="lg" className="w-full sm:w-auto bg-emerald-600 hover:bg-emerald-500 text-white rounded-full px-8 font-bold shadow-lg shadow-emerald-950/50 hover:scale-105 hover:shadow-emerald-500/20 transition-all duration-300 py-6">
+                  Start Shopping <ArrowRight className="w-4 h-4 ml-2" />
+                </Button>
+              </Link>
+              <a href="#hub" className="w-full sm:w-auto">
+                <Button size="lg" variant="outline" className="w-full sm:w-auto rounded-full px-8 text-emerald-400 border-emerald-500/30 bg-transparent hover:bg-emerald-500/10 hover:text-white transition-all py-6">
+                  Explore AI Hub
+                </Button>
+              </a>
+            </div>
+
           </div>
+
+          {/* Embedded Conversational AI Assistant (Right Column - 45%) - Hidden on mobile, visible on desktop */}
+          <div className="hidden lg:flex lg:w-[45%] z-10 w-full justify-center items-center">
+            <div className="w-full max-w-md hover:scale-[1.01] transition-transform duration-300">
+              <AIChatBox containerHeight="h-[480px]" />
+            </div>
+          </div>
+
         </div>
 
       </section>
