@@ -7,7 +7,7 @@ const ChatInput = ({ onSendMessage, disabled }) => {
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    if (!text.trim()) return;
+    if (!text.trim() || disabled) return;
     onSendMessage(text.trim());
     setText('');
   };
@@ -23,15 +23,15 @@ const ChatInput = ({ onSendMessage, disabled }) => {
           type="text"
           value={text}
           onChange={(e) => setText(e.target.value)}
-          placeholder="Ask anything..."
+          placeholder={disabled ? "NexaCart AI is thinking..." : "Ask NexaCart AI anything..."}
           disabled={disabled}
-          className="w-full bg-transparent border-none text-xs text-white placeholder-gray-400 focus:outline-none focus:ring-0 disabled:cursor-not-allowed py-1.5"
+          className="w-full bg-transparent border-none text-xs text-white placeholder-gray-400 focus:outline-none focus:ring-0 disabled:opacity-60 disabled:cursor-not-allowed py-1.5"
         />
         <button
           type="button"
           onClick={handleMicClick}
           disabled={disabled}
-          className="p-1.5 text-gray-400 hover:text-emerald-400 rounded-full hover:bg-white/5 transition-colors"
+          className="p-1.5 text-gray-400 hover:text-emerald-400 rounded-full hover:bg-white/5 disabled:opacity-40 transition-colors"
           title="Voice Search"
         >
           <Mic className="w-4 h-4" />
@@ -40,7 +40,7 @@ const ChatInput = ({ onSendMessage, disabled }) => {
       <button
         type="submit"
         disabled={disabled || !text.trim()}
-        className="h-9 w-9 rounded-full bg-gradient-to-tr from-emerald-600 to-green-500 text-white flex items-center justify-center shadow-md hover:scale-105 active:scale-95 disabled:opacity-50 disabled:pointer-events-none transition-all duration-150 shrink-0"
+        className="h-9 w-9 rounded-full bg-gradient-to-tr from-emerald-600 to-green-500 text-white flex items-center justify-center shadow-md hover:scale-105 active:scale-95 disabled:opacity-40 disabled:pointer-events-none transition-all duration-150 shrink-0"
         title="Send Message"
       >
         <Send className="w-3.5 h-3.5 fill-white text-emerald-600 ml-0.5" />
