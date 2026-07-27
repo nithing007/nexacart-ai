@@ -3,7 +3,7 @@ import { useDispatch, useSelector } from 'react-redux';
 import { Link } from 'react-router-dom';
 import { addToCart } from '../redux/slices/cartSlice';
 import { addToWishlist, removeFromWishlist } from '../redux/slices/wishlistSlice';
-import { Sparkles, Heart, ShoppingCart, Star, ArrowRight } from 'lucide-react';
+import { Sparkles, Heart, ShoppingCart, Star,  } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { Card, CardContent } from '../components/ui/card';
 import api from '../services/api';
@@ -12,7 +12,7 @@ import toast from 'react-hot-toast';
 const AiRecommendations = () => {
   const dispatch = useDispatch();
   const { products: wishlistProducts } = useSelector((state) => state.wishlist);
-  const { isAuthenticated } = useSelector((state) => state.auth);
+  
 
   const [loading, setLoading] = useState(false);
   const [recommendations, setRecommendations] = useState([]);
@@ -36,6 +36,7 @@ const AiRecommendations = () => {
   };
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchAiPicks();
   }, []);
 

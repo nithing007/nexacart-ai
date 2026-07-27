@@ -12,7 +12,7 @@ const Login = () => {
   const dispatch = useDispatch();
   const navigate = useNavigate();
 
-  const { loading, error, isAuthenticated } = useSelector((state) => state.auth);
+  const { loading, error, isAuthenticated, user } = useSelector((state) => state.auth);
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -30,12 +30,16 @@ const Login = () => {
     { name: 'Nithin G', email: 'gnithin.699@gmail.com', googleId: 'google_nithin_699', avatarColor: 'bg-emerald-700', avatarText: 'N' },
   ];
 
-  // Redirect if already authenticated
+  // Redirect if already authenticated based on database user role
   useEffect(() => {
-    if (isAuthenticated) {
-      navigate('/');
+    if (isAuthenticated && user) {
+      if (user.role === 'admin') {
+        navigate('/admin', { replace: true });
+      } else {
+        navigate('/user/dashboard', { replace: true });
+      }
     }
-  }, [isAuthenticated, navigate]);
+  }, [isAuthenticated, user, navigate]);
 
   // Clean error on unmount
   useEffect(() => {
@@ -53,9 +57,13 @@ const Login = () => {
 
     dispatch(loginUserAsync({ email, password }))
       .unwrap()
-      .then(() => {
+      .then((data) => {
         toast.success('Logged in successfully!');
-        navigate('/');
+        if (data?.user?.role === 'admin') {
+          navigate('/admin', { replace: true });
+        } else {
+          navigate('/user/dashboard', { replace: true });
+        }
       })
       .catch((err) => {
         toast.error(err || 'Invalid credentials');
@@ -75,9 +83,13 @@ const Login = () => {
       googleId: account.googleId
     }))
       .unwrap()
-      .then(() => {
+      .then((data) => {
         toast.success(`Welcome back, ${firstName}!`);
-        navigate('/');
+        if (data?.user?.role === 'admin') {
+          navigate('/admin', { replace: true });
+        } else {
+          navigate('/user/dashboard', { replace: true });
+        }
       })
       .catch((err) => {
         toast.error(err || 'Google Login failed');

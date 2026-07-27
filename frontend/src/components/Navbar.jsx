@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useSelector, useDispatch } from 'react-redux';
-import { ShoppingCart, User, Search, Heart, Wallet, LogOut, ChevronDown } from 'lucide-react';
+import { ShoppingCart, User, Search, Heart, Wallet, LogOut, ChevronDown, Clock, X, Shield } from 'lucide-react';
 import { Input } from './ui/input';
 import { logout } from '../redux/slices/authSlice';
 
@@ -13,6 +13,17 @@ const Navbar = () => {
   const { products: wishlistProducts } = useSelector((state) => state.wishlist);
 
   const [searchQuery, setSearchQuery] = useState('');
+  const [searchHistory, setSearchHistory] = useState(() => {
+    try {
+      const saved = localStorage.getItem('nexacart_recent_searches');
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
+  const [showSearchDropdown, setShowSearchDropdown] = useState(false);
+  const searchBoxRef = useRef(null);
+
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const dropdownRef = useRef(null);
   
@@ -21,6 +32,7 @@ const Navbar = () => {
 
   const cartItemsCount = items.reduce((sum, item) => sum + item.quantity, 0);
 
+  // Handle outside clicks to close dropdowns
   useEffect(() => {
     const handleClickOutside = (event) => {
       if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
@@ -29,6 +41,9 @@ const Navbar = () => {
       if (dropdownRefMobile.current && !dropdownRefMobile.current.contains(event.target)) {
         setDropdownOpenMobile(false);
       }
+      if (searchBoxRef.current && !searchBoxRef.current.contains(event.target)) {
+        setShowSearchDropdown(false);
+      }
     };
     document.addEventListener('mousedown', handleClickOutside);
     return () => {
@@ -36,17 +51,67 @@ const Navbar = () => {
     };
   }, []);
 
+  const saveSearchToHistory = (queryStr) => {
+    const trimmed = queryStr.trim();
+    if (!trimmed) return;
+    setSearchHistory((prev) => {
+      const filtered = prev.filter((item) => item.toLowerCase() !== trimmed.toLowerCase());
+      const updated = [trimmed, ...filtered].slice(0, 6);
+      try {
+        localStorage.setItem('nexacart_recent_searches', JSON.stringify(updated));
+      } catch {
+        // Fallback if localStorage quota exceeded
+      }
+      return updated;
+    });
+  };
+
+  const removeHistoryItem = (itemToRemove) => {
+    setSearchHistory((prev) => {
+      const updated = prev.filter((item) => item !== itemToRemove);
+      try {
+        localStorage.setItem('nexacart_recent_searches', JSON.stringify(updated));
+      } catch {
+        // Fallback
+      }
+      return updated;
+    });
+  };
+
+  const clearAllHistory = () => {
+    setSearchHistory([]);
+    try {
+      localStorage.removeItem('nexacart_recent_searches');
+    } catch {
+      // Fallback
+    }
+  };
+
   const handleSearchSubmit = (e) => {
     e.preventDefault();
     if (searchQuery.trim()) {
+      saveSearchToHistory(searchQuery.trim());
+      setShowSearchDropdown(false);
       navigate(`/search?q=${encodeURIComponent(searchQuery.trim())}`);
     }
+  };
+
+  const handleSelectHistory = (queryItem) => {
+    setSearchQuery(queryItem);
+    saveSearchToHistory(queryItem);
+    setShowSearchDropdown(false);
+    navigate(`/search?q=${encodeURIComponent(queryItem)}`);
   };
 
   const handleLogout = () => {
     dispatch(logout());
     navigate('/');
   };
+
+  // Filter history if user is actively typing
+  const filteredHistory = searchQuery.trim()
+    ? searchHistory.filter((item) => item.toLowerCase().includes(searchQuery.trim().toLowerCase()))
+    : searchHistory;
 
   return (
     <nav className="bg-white sticky top-0 z-50 border-b border-gray-100 shadow-sm">
@@ -63,7 +128,7 @@ const Navbar = () => {
           
           {/* Cart & Heart & Shop & Profile dropdown for mobile */}
           <div className="flex md:hidden items-center gap-3">
-            {/* Shop Products Link (hidden in desktop, visible left of wishlist in mobile) */}
+            {/* Shop Products Link */}
             <Link to="/products" className="text-xs font-black text-emerald-700 hover:text-emerald-800 transition-colors px-2.5 py-1.5 bg-emerald-50 rounded-lg hover:bg-emerald-100">
               Shop
             </Link>
@@ -112,6 +177,16 @@ const Navbar = () => {
                         <p className="text-[9px] uppercase tracking-wider text-gray-400 font-bold">Signed in as</p>
                         <p className="font-semibold text-gray-800 truncate text-[11px]">{user?.email}</p>
                       </div>
+                      {user?.role === 'admin' && (
+                        <Link
+                          to="/admin"
+                          onClick={() => setDropdownOpenMobile(false)}
+                          className="flex items-center gap-2 px-4 py-2 text-xs text-purple-700 font-bold bg-purple-50 hover:bg-purple-100 transition-colors"
+                        >
+                          <Shield className="w-3.5 h-3.5 text-purple-600" />
+                          <span>Admin Dashboard</span>
+                        </Link>
+                      )}
                       <Link
                         to="/user/dashboard"
                         onClick={() => setDropdownOpenMobile(false)}
@@ -177,18 +252,67 @@ const Navbar = () => {
           </div>
         </div>
         
-        {/* Search Bar Form */}
-        <form onSubmit={handleSearchSubmit} className="w-full md:flex-1 md:max-w-xl flex items-center relative">
-          <Input 
-            type="text" 
-            placeholder="Search for premium products, electronics, groceries..." 
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full pl-4 pr-10 py-2 rounded-full border-gray-200 focus:border-green-500 focus:ring-green-500 bg-gray-50 focus:bg-white transition-all shadow-inner"
-          />
-          <button type="submit" className="absolute right-3 text-gray-400 hover:text-green-600">
-            <Search className="w-5 h-5" />
-          </button>
+        {/* Search Bar Form with Recent Searches Dropdown */}
+        <form onSubmit={handleSearchSubmit} ref={searchBoxRef} className="w-full md:flex-1 md:max-w-xl flex flex-col relative">
+          <div className="relative w-full flex items-center">
+            <Input 
+              type="text" 
+              placeholder="Search for premium products, electronics, groceries..." 
+              value={searchQuery}
+              onChange={(e) => {
+                setSearchQuery(e.target.value);
+                setShowSearchDropdown(true);
+              }}
+              onFocus={() => setShowSearchDropdown(true)}
+              className="w-full pl-4 pr-10 py-2 rounded-full border-gray-200 focus:border-green-500 focus:ring-green-500 bg-gray-50 focus:bg-white transition-all shadow-inner"
+            />
+            <button type="submit" className="absolute right-3 text-gray-400 hover:text-green-600">
+              <Search className="w-5 h-5" />
+            </button>
+          </div>
+
+          {/* Recent Searches Dropdown */}
+          {showSearchDropdown && filteredHistory.length > 0 && (
+            <div className="absolute top-full left-0 right-0 mt-2 bg-white rounded-2xl shadow-xl border border-gray-100 py-2 z-50 animate-in fade-in slide-in-from-top-2 duration-200">
+              <div className="flex items-center justify-between px-4 py-1.5 border-b border-gray-50 text-[11px] font-extrabold uppercase tracking-wider text-gray-400">
+                <span className="flex items-center gap-1.5 text-emerald-700">
+                  <Clock className="w-3.5 h-3.5 text-emerald-600" /> Recent Searches
+                </span>
+                <button
+                  type="button"
+                  onClick={clearAllHistory}
+                  className="text-[10px] text-gray-400 hover:text-rose-600 transition-colors uppercase font-bold"
+                >
+                  Clear All
+                </button>
+              </div>
+              <div className="py-1">
+                {filteredHistory.map((item, idx) => (
+                  <div
+                    key={idx}
+                    className="flex items-center justify-between px-4 py-2 hover:bg-emerald-50/80 cursor-pointer text-xs font-semibold text-gray-700 hover:text-emerald-800 transition-colors group"
+                    onClick={() => handleSelectHistory(item)}
+                  >
+                    <div className="flex items-center gap-2.5 flex-1 truncate">
+                      <Clock className="w-3.5 h-3.5 text-gray-400 group-hover:text-emerald-600 shrink-0" />
+                      <span className="truncate">{item}</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        removeHistoryItem(item);
+                      }}
+                      className="text-gray-300 hover:text-rose-500 p-1 rounded-full hover:bg-rose-50 transition-colors shrink-0"
+                      title="Remove from history"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </form>
 
         {/* Action Links */}
@@ -256,6 +380,16 @@ const Navbar = () => {
                       <p className="text-[10px] uppercase tracking-wider text-gray-400 font-bold">Signed in as</p>
                       <p className="font-semibold text-gray-800 truncate text-xs">{user?.email}</p>
                     </div>
+                    {user?.role === 'admin' && (
+                      <Link
+                        to="/admin"
+                        onClick={() => setDropdownOpen(false)}
+                        className="flex items-center gap-2.5 px-4 py-2 text-xs text-purple-700 font-bold bg-purple-50 hover:bg-purple-100 transition-colors"
+                      >
+                        <Shield className="w-4 h-4 text-purple-600" />
+                        <span>Admin Dashboard</span>
+                      </Link>
+                    )}
                     <Link
                       to="/user/dashboard"
                       onClick={() => setDropdownOpen(false)}

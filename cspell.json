@@ -1,0 +1,26 @@
+{
+  "$schema": "https://raw.githubusercontent.com/streetsidesoftware/cspell/main/cspell.schema.json",
+  "version": "0.2",
+  "language": "en",
+  "words": [
+    "nexacart",
+    "NexaCart",
+    "OLED",
+    "Zenbook",
+    "MacBook",
+    "smartwatch",
+    "refrigerator",
+    "wishlist",
+    "wishlisted",
+    "greetings",
+    "namaste",
+    "lucide",
+    "tailwindcss",
+    "clsx",
+    "twMerge",
+    "reduxjs",
+    "antigravity",
+    "seeder"
+  ],
+  "ignoreWords": []
+}

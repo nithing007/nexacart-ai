@@ -7,7 +7,7 @@ import { addToWishlist, removeFromWishlist } from '../redux/slices/wishlistSlice
 import { 
   Heart, ShoppingCart, Star, LayoutGrid, Cpu, 
   ShoppingBag, Shirt, Home, Watch, Dumbbell, BookOpen, 
-  Sparkles, Search, Menu, X, SlidersHorizontal 
+  Sparkles, Search, Menu, X 
 } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { Card, CardContent } from '../components/ui/card';

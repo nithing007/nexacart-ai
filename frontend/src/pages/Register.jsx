@@ -12,13 +12,13 @@ const Register = () => {
   const dispatch = useDispatch();
   const navigate = useNavigate();
 
-  const { loading, error, isAuthenticated } = useSelector((state) => state.auth);
+  const { loading, error, isAuthenticated, user } = useSelector((state) => state.auth);
 
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
-  const [dob, setDob] = useState('');
+  const [dob] = useState('');
   const [phoneNumber, setPhoneNumber] = useState('');
-  const [address, setAddress] = useState('');
+  const [address] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -45,10 +45,14 @@ const Register = () => {
 
   // Redirect if already authenticated
   useEffect(() => {
-    if (isAuthenticated) {
-      navigate('/');
+    if (isAuthenticated && user) {
+      if (user.role === 'admin') {
+        navigate('/admin');
+      } else {
+        navigate('/user/dashboard');
+      }
     }
-  }, [isAuthenticated, navigate]);
+  }, [isAuthenticated, user, navigate]);
 
   // Clean error on unmount
   useEffect(() => {
@@ -87,9 +91,13 @@ const Register = () => {
 
     dispatch(registerUserAsync(userData))
       .unwrap()
-      .then(() => {
+      .then((data) => {
         toast.success('Account created successfully!');
-        navigate('/');
+        if (data?.user?.role === 'admin') {
+          navigate('/admin');
+        } else {
+          navigate('/user/dashboard');
+        }
       })
       .catch((err) => {
         toast.error(err || 'Failed to create account');
@@ -109,9 +117,13 @@ const Register = () => {
       googleId: account.googleId
     }))
       .unwrap()
-      .then(() => {
+      .then((data) => {
         toast.success(`Welcome back, ${firstName}!`);
-        navigate('/');
+        if (data?.user?.role === 'admin') {
+          navigate('/admin');
+        } else {
+          navigate('/user/dashboard');
+        }
       })
       .catch((err) => {
         toast.error(err || 'Google registration failed');

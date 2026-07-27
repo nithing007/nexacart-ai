@@ -2,7 +2,7 @@ import { useEffect } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { useParams, Link } from 'react-router-dom';
 import { fetchOrderDetails, clearOrderDetails } from '../redux/slices/ordersSlice';
-import { ArrowLeft, MapPin, CreditCard, ShoppingBag, Truck } from 'lucide-react';
+import { ArrowLeft, MapPin, CreditCard, ShoppingBag } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { Card, CardContent } from '../components/ui/card';
 import { getFallbackImage } from '../utils/imageHelper';

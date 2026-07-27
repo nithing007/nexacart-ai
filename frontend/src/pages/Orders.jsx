@@ -2,7 +2,7 @@ import { useEffect } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { Link } from 'react-router-dom';
 import { fetchMyOrders } from '../redux/slices/ordersSlice';
-import { ShoppingBag, ChevronRight, Calendar, CreditCard, Box } from 'lucide-react';
+import { ShoppingBag, ChevronRight, Calendar, CreditCard } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { Card, CardContent } from '../components/ui/card';
 

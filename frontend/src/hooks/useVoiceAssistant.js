@@ -1,0 +1,198 @@
+import { useState, useEffect, useRef, useCallback } from 'react';
+
+/**
+ * Custom Hook for Web Speech API Voice Assistant
+ * Manages Speech-to-Text (STT) recording and Text-to-Speech (TTS) response synthesis.
+ */
+export const useVoiceAssistant = () => {
+  const [isListening, setIsListening] = useState(false);
+  const [isSpeaking, setIsSpeaking] = useState(false);
+  const [isMuted, setIsMuted] = useState(false);
+  const [transcript, setTranscript] = useState('');
+  const [error, setError] = useState(null);
+  
+  // Initialize isSupported lazily without triggering effect state updates
+  const [isSupported] = useState(() => {
+    return typeof window !== 'undefined' && Boolean(window.SpeechRecognition || window.webkitSpeechRecognition);
+  });
+
+  const recognitionRef = useRef(null);
+  const utteranceRef = useRef(null);
+
+  // Initialize Speech Recognition on mount if supported
+  useEffect(() => {
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SpeechRecognition) return;
+
+    try {
+      const recognition = new SpeechRecognition();
+      recognition.continuous = false;
+      recognition.interimResults = true;
+      recognition.lang = 'en-US';
+
+      recognition.onstart = () => {
+        setIsListening(true);
+        setError(null);
+        // FEATURE 21: VOICE INTERRUPT - Stop any ongoing speech synthesis when user starts talking
+        if (window.speechSynthesis && window.speechSynthesis.speaking) {
+          window.speechSynthesis.cancel();
+          setIsSpeaking(false);
+        }
+      };
+
+      recognition.onresult = (event) => {
+        let currentTranscript = '';
+        for (let i = event.resultIndex; i < event.results.length; i++) {
+          currentTranscript += event.results[i][0].transcript;
+        }
+        setTranscript(currentTranscript);
+      };
+
+      recognition.onerror = (event) => {
+        console.warn('Speech recognition error:', event.error);
+        setIsListening(false);
+        if (event.error === 'not-allowed') {
+          setError('Microphone permission denied. Please allow microphone access.');
+        } else {
+          setError("I couldn't hear you clearly. Please try again.");
+        }
+      };
+
+      recognition.onend = () => {
+        setIsListening(false);
+      };
+
+      recognitionRef.current = recognition;
+    } catch (err) {
+      console.warn('Failed to initialize Speech Recognition:', err);
+    }
+  }, []);
+
+  /**
+   * Start listening to voice input
+   */
+  const startListening = useCallback(() => {
+    if (!recognitionRef.current) {
+      setError('Voice recognition is not supported in this browser.');
+      return;
+    }
+
+    if (window.speechSynthesis) {
+      window.speechSynthesis.cancel();
+      setIsSpeaking(false);
+    }
+
+    setTranscript('');
+    setError(null);
+    try {
+      recognitionRef.current.start();
+    } catch {
+      try {
+        recognitionRef.current.stop();
+        setTimeout(() => recognitionRef.current?.start(), 150);
+      } catch (e) {
+        console.warn('Recognition start retry error:', e);
+      }
+    }
+  }, []);
+
+  /**
+   * Stop listening to voice input
+   */
+  const stopListening = useCallback(() => {
+    if (recognitionRef.current) {
+      try {
+        recognitionRef.current.stop();
+      } catch (e) {
+        console.warn('Recognition stop error:', e);
+      }
+    }
+    setIsListening(false);
+  }, []);
+
+  /**
+   * Speak response text using Web Speech Synthesis
+   */
+  const speak = useCallback((text, onEnd) => {
+    if (isMuted || !window.speechSynthesis) return;
+
+    window.speechSynthesis.cancel();
+
+    const cleanText = text
+      .replace(/[*_#`~]/g, '')
+      .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
+      .replace(/•/g, '')
+      .replace(/\n+/g, '. ')
+      .trim();
+
+    if (!cleanText) return;
+
+    try {
+      const utterance = new SpeechSynthesisUtterance(cleanText);
+      utterance.rate = 1.0;
+      utterance.pitch = 1.0;
+      utterance.lang = 'en-US';
+
+      const voices = window.speechSynthesis.getVoices();
+      const preferredVoice = voices.find(v => (v.name.includes('Google') || v.name.includes('Natural') || v.name.includes('Female') || v.name.includes('Samantha') || v.name.includes('Zira')) && v.lang.startsWith('en'));
+      if (preferredVoice) {
+        utterance.voice = preferredVoice;
+      }
+
+      utterance.onstart = () => setIsSpeaking(true);
+      utterance.onend = () => {
+        setIsSpeaking(false);
+        if (onEnd) onEnd();
+      };
+      utterance.onerror = (err) => {
+        console.warn('Speech synthesis error:', err);
+        setIsSpeaking(false);
+      };
+
+      utteranceRef.current = utterance;
+      window.speechSynthesis.speak(utterance);
+    } catch (e) {
+      console.warn('Speech synthesis failed:', e);
+      setIsSpeaking(false);
+    }
+  }, [isMuted]);
+
+  /**
+   * Stop speech synthesis immediately
+   */
+  const stopSpeaking = useCallback(() => {
+    if (window.speechSynthesis) {
+      window.speechSynthesis.cancel();
+    }
+    setIsSpeaking(false);
+  }, []);
+
+  /**
+   * Toggle Mute state
+   */
+  const toggleMute = useCallback(() => {
+    setIsMuted(prev => {
+      const next = !prev;
+      if (next && window.speechSynthesis) {
+        window.speechSynthesis.cancel();
+        setIsSpeaking(false);
+      }
+      return next;
+    });
+  }, []);
+
+  return {
+    isSupported,
+    isListening,
+    isSpeaking,
+    isMuted,
+    transcript,
+    error,
+    startListening,
+    stopListening,
+    speak,
+    stopSpeaking,
+    toggleMute,
+    setTranscript
+  };
+};

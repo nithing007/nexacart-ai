@@ -1,54 +1,84 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useSelector } from 'react-redux';
-import api from '../../services/api';
+import { useNavigate } from 'react-router-dom';
 import ChatHeader from './ChatHeader';
 import ChatMessage from './ChatMessage';
 import ChatInput from './ChatInput';
 import SuggestedPrompts from './SuggestedPrompts';
-import { Sparkles, Trash2 } from 'lucide-react';
+import { processUserMessage } from '../../ai/conversationEngine';
+import { useVoiceAssistant } from '../../hooks/useVoiceAssistant';
+import { Sparkles, Trash2, Mic } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 const AIChatBox = ({ onClose, containerHeight = "h-[500px]" }) => {
-  const { user } = useSelector((state) => state.auth);
-  
-  // Extract user's first name if logged in
-  const firstName = user?.name ? user.name.trim().split(' ')[0] : null;
+  const navigate = useNavigate();
+  const auth = useSelector((state) => state.auth);
+  const cart = useSelector((state) => state.cart);
+  const wishlist = useSelector((state) => state.wishlist);
+  const orders = useSelector((state) => state.orders);
 
-  // Build personalized welcome message
+  const user = auth?.user;
+  const firstName = user?.name ? user.name.trim().split(' ')[0] : (user?.firstName || null);
+
+  // Custom Web Speech API Voice Assistant Hook
+  const {
+    isSupported,
+    isListening,
+    isSpeaking,
+    isMuted,
+    transcript,
+    error: voiceError,
+    startListening,
+    stopListening,
+    speak,
+    stopSpeaking,
+    toggleMute,
+    setTranscript
+  } = useVoiceAssistant();
+
+  // Welcome message generator
   const buildWelcomeMessage = (name) => {
     if (name) {
       return {
         id: 'welcome',
         sender: 'assistant',
-        text: `Hello ${name} 👋\n\nI'm NexaCart AI,\nyour personal shopping assistant.\n\nHow can I help you today?\n\nNeed product recommendations,\nshopping advice,\nbudget planning,\nor price comparisons?`,
+        text: `Hello ${name} 👋\n\nWelcome back to NexaCart AI.\nHow can I help you shop today?`,
         timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-        followUps: ["Gaming laptop", "Compare products", "Gift ideas", "Budget planning"]
+        followUps: ["Gaming phone under ₹25,000", "Compare laptops", "Plan monthly budget", "Open Cart"]
       };
     }
     return {
       id: 'welcome',
       sender: 'assistant',
-      text: `Hello 👋\n\nI'm NexaCart AI.\n\nHow can I help you today?`,
+      text: `Hello 👋\n\nI'm NexaCart AI, your personal shopping assistant.\nHow can I help you shop today?`,
       timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-      followUps: ["Shopping advice", "Product recommendations", "Price comparisons", "Budgeting"]
+      followUps: ["Shopping advice", "Recommend smartphones", "Price comparisons", "Open Cart"]
     };
   };
 
   const [messages, setMessages] = useState([buildWelcomeMessage(firstName)]);
   const [isLoading, setIsLoading] = useState(false);
-  const [allProducts, setAllProducts] = useState([]);
-  
-  // Session memory for conversational context
+  const [thinkingStep, setThinkingStep] = useState('');
+
+  // Multi-turn context memory across turns
   const [contextMemory, setContextMemory] = useState({
-    subject: '',       // e.g. "gaming laptop", "smartphone", "gift"
-    budget: null,      // e.g. 70000
-    category: '',      // e.g. "Electronics"
-    lastQuery: ''      // last user query
+    subject: '',
+    budget: null,
+    category: '',
+    brand: '',
+    usage: '',
+    ram: '',
+    storage: '',
+    processor: '',
+    purpose: '',
+    lastQuery: '',
+    history: [],
+    lastProducts: []
   });
 
   const chatContainerRef = useRef(null);
 
-// Derive display messages so welcome message updates dynamically without useEffect setState
+  // Synchronize welcome message name
   const displayMessages = messages.map(msg => {
     if (msg.id === 'welcome') {
       return buildWelcomeMessage(firstName);
@@ -56,20 +86,7 @@ const AIChatBox = ({ onClose, containerHeight = "h-[500px]" }) => {
     return msg;
   });
 
-  // Prefetch products for local search & fallback reasoning
-  useEffect(() => {
-    const loadProducts = async () => {
-      try {
-        const res = await api.get('/products');
-        setAllProducts(res.data || []);
-      } catch (err) {
-        console.warn('Failed to load products for local catalog search', err);
-      }
-    };
-    loadProducts();
-  }, []);
-
-  // Internal Container Scroll Only — DOES NOT scroll the browser window/page
+  // Auto-scroll chat container to bottom
   const scrollToBottomInternal = () => {
     if (chatContainerRef.current) {
       chatContainerRef.current.scrollTo({
@@ -81,247 +98,194 @@ const AIChatBox = ({ onClose, containerHeight = "h-[500px]" }) => {
 
   useEffect(() => {
     scrollToBottomInternal();
-  }, [messages, isLoading]);
+  }, [messages, isLoading, thinkingStep]);
 
-  // Comprehensive Local Natural Language Processing & Fallback Engine
-  const generateConversationalResponse = (queryText, currentMemory) => {
-    const lower = queryText.toLowerCase().trim();
-    let updatedMemory = { ...currentMemory, lastQuery: queryText };
+  // Main Handler for sending user messages & progressive response streaming
+  const handleSendMessage = useCallback(async (text) => {
+    if (!text || !text.trim() || isLoading) return;
 
-    // 1. GREETINGS
-    if (/^(hi|hello|hey|good morning|good afternoon|good evening|greetings|namaste)\b/i.test(lower)) {
-      const greetingName = firstName ? ` ${firstName}` : '';
-      return {
-        text: `Hello${greetingName}! 👋 Great to chat with you.\n\nI'm ready to assist you with:\n• Finding top-rated products\n• Product comparisons\n• Budget-friendly shopping bundles\n• Technical specification advice\n\nWhat are you looking to buy today?`,
-        followUps: ["I'm buying a laptop", "I need a gift", "Compare iPhone vs Samsung", "Set a budget"],
-        memory: updatedMemory
-      };
-    }
+    // Feature 21: Interrupt TTS if user sends new message
+    stopSpeaking();
 
-    // 2. UNRELATED / NON-SHOPPING QUESTIONS
-    const nonShoppingKeywords = ['weather', 'who won', 'president', 'prime minister', 'capital of', 'recipe', 'poem', 'write code', 'python script', 'math', 'calculate 2+2'];
-    const isNonShopping = nonShoppingKeywords.some(k => lower.includes(k)) && 
-                          !lower.includes('laptop') && !lower.includes('phone') && !lower.includes('buy') && !lower.includes('shop') && !lower.includes('product');
-    
-    if (isNonShopping) {
-      return {
-        text: `I'm designed to help you with shopping, product recommendations, comparisons, budgeting and product information.\n\nI'll do my best to answer general questions too.\n\nIf you have any shopping or product needs, feel free to ask anytime!`,
-        followUps: ["Recommend laptops", "Show top electronics", "Browse groceries"],
-        memory: updatedMemory
-      };
-    }
-
-    // 3. EXTRACT BUDGET
-    const budgetMatch = lower.match(/(?:under|below|less than|max|budget of|budget is|around)\s*₹?\s*(\d+)/i) 
-      || lower.match(/(\d+)\s*(?:k|thousand|rupees|rs|budget)/i);
-    
-    if (budgetMatch) {
-      let extracted = Number(budgetMatch[1]);
-      if (lower.includes('k') && extracted < 1000) extracted *= 1000;
-      updatedMemory.budget = extracted;
-    }
-
-    // 4. EXTRACT SUBJECT / CATEGORY
-    if (lower.includes('laptop') || lower.includes('macbook') || lower.includes('computer') || lower.includes('pc')) {
-      updatedMemory.subject = lower.includes('gaming') ? 'gaming laptop' : 'laptop';
-      updatedMemory.category = 'Electronics';
-    } else if (lower.includes('phone') || lower.includes('mobile') || lower.includes('iphone') || lower.includes('samsung')) {
-      updatedMemory.subject = 'smartphone';
-      updatedMemory.category = 'Electronics';
-    } else if (lower.includes('gift') || lower.includes('parents') || lower.includes('friend')) {
-      updatedMemory.subject = 'gift items';
-    } else if (lower.includes('grocer') || lower.includes('food')) {
-      updatedMemory.category = 'Groceries';
-    } else if (lower.includes('fashion') || lower.includes('shoe') || lower.includes('wear') || lower.includes('cloth')) {
-      updatedMemory.category = 'Fashion';
-    }
-
-    // 5. TECHNICAL SPEC EXPLANATIONS (e.g., "Can you explain OLED?", "What is refresh rate?")
-    if (lower.includes('explain') || lower.includes('what is') || lower.includes('tell me about')) {
-      if (lower.includes('oled') || lower.includes('display') || lower.includes('screen')) {
-        return {
-          text: `**OLED (Organic Light-Emitting Diode) Display Technology**\n\nOLED panels feature self-lit pixels that produce perfect true blacks and infinite contrast ratios.\n\nReason:\n✔ True pitch blacks & infinite contrast\n✔ Ultra-fast pixel response times (ideal for gaming)\n✔ Vibrant color accuracy and high brightness\n\nCons:\n✖ Slightly higher power consumption on full white screens\n✖ Premium price point\n\nWould you like me to recommend laptops or smartphones with OLED screens?`,
-          followUps: ["Show OLED laptops", "Show OLED phones", "Compare LED vs OLED"],
-          memory: updatedMemory
-        };
-      }
-    }
-
-    // 6. AMBIGUOUS / UNDERSPECIFIED SHOPPING REQUESTS (PART 7)
-    if (lower === "i'm buying a laptop" || lower === "i need a laptop" || lower === "what should i buy?" || lower === "i'm confused" || lower === "i don't know what to buy") {
-      return {
-        text: `I'd love to help you find the perfect choice!\n\nTo narrow down the best recommendations, could you tell me:\n\n1. What will you mainly use it for?\n   • Gaming\n   • Programming\n   • College / Studies\n   • Office & Productivity\n   • Video / Photo Editing\n\n2. What is your approximate budget?`,
-        followUps: ["Gaming (under ₹70,000)", "College & Office (under ₹50,000)", "Programming (under ₹80,000)"],
-        memory: updatedMemory
-      };
-    }
-
-    // 7. COMPARISONS (PART 3 & 4)
-    if (lower.includes('compare') || lower.includes('vs') || lower.includes('difference')) {
-      const subjectDesc = updatedMemory.subject ? `${updatedMemory.subject}s` : 'products';
-      const budgetDesc = updatedMemory.budget ? ` under ₹${updatedMemory.budget.toLocaleString()}` : '';
-
-      // Filter matched products for comparison
-      let matchedProds = allProducts.filter(p => {
-        if (updatedMemory.category && p.category !== updatedMemory.category) return false;
-        if (updatedMemory.budget && p.price > updatedMemory.budget) return false;
-        return true;
-      }).slice(0, 4);
-
-      if (matchedProds.length === 0) matchedProds = allProducts.slice(0, 3);
-
-      return {
-        text: `**Comparison Overview for ${subjectDesc}${budgetDesc}:**\n\n• **Performance & Specs**: Models in this segment feature powerful processors, fast SSD storage, and crisp displays.\n• **Value for Money**: We recommend comparing build quality, battery life, and warranty coverage.\n\nReason:\n✔ Selected options fit your specified constraints\n✔ High customer ratings & verified reviews\n\nWould you like detailed side-by-side specs for any of these items?`,
-        reasoning: `Matched ${matchedProds.length} top candidates fitting your request.`,
-        recommendations: "Click any product card below to inspect full specs or add to your shopping cart.",
-        products: matchedProds,
-        followUps: ["Show specs", "Find cheaper alternatives", "Check customer ratings"],
-        memory: updatedMemory
-      };
-    }
-
-    // 8. GENERAL PRODUCT RECOMMENDATION / SEARCH FALLBACK
-    let targetCategory = updatedMemory.category;
-    let targetPrice = updatedMemory.budget || Infinity;
-
-    let matched = allProducts.filter(p => {
-      const catOk = !targetCategory || p.category === targetCategory;
-      const priceOk = p.price <= targetPrice;
-      const nameMatch = p.name.toLowerCase().includes(lower) || p.description.toLowerCase().includes(lower);
-      return (catOk || nameMatch) && priceOk;
-    });
-
-    if (matched.length === 0 && targetPrice < Infinity) {
-      matched = allProducts.filter(p => p.price <= targetPrice);
-    }
-    if (matched.length === 0) {
-      matched = [...allProducts].sort((a, b) => b.rating - a.rating).slice(0, 5);
-    } else {
-      matched = matched.slice(0, 5);
-    }
-
-    const priceText = targetPrice < Infinity ? ` under ₹${targetPrice.toLocaleString()}` : '';
-    const subjectText = updatedMemory.subject || queryText;
-
-    return {
-      text: `Based on your request for **"${subjectText}"**${priceText}, here are top recommendations tailored for you:\n\nReason:\n✔ Top customer ratings & reliable performance\n✔ High build quality & verified seller warranty\n✔ Excellent price-to-performance ratio\n\nWould you like me to compare these options or look for alternative models?`,
-      reasoning: `Analyzed catalog items for "${queryText}" matching rating, category, and budget criteria.`,
-      recommendations: "You can add items directly to your cart or save them to your wishlist.",
-      products: matched,
-      followUps: ["Compare these models", "Show cheaper options", "Refine budget"],
-      memory: updatedMemory
-    };
-  };
-
-  const handleSendMessage = async (text) => {
     const userMsgId = Date.now().toString();
     const userTimestamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
     const newUserMessage = {
       id: userMsgId,
       sender: 'user',
-      text: text,
+      text: text.trim(),
       timestamp: userTimestamp
     };
 
     setMessages(prev => [...prev, newUserMessage]);
     setIsLoading(true);
 
+    // Feature 16: AI Thinking State Progressive Steps
+    setThinkingStep('Understanding request...');
+    const stepTimer1 = setTimeout(() => setThinkingStep('Searching catalog...'), 300);
+    const stepTimer2 = setTimeout(() => setThinkingStep('Analyzing products...'), 600);
+    const stepTimer3 = setTimeout(() => setThinkingStep('Generating response...'), 900);
+
     try {
-      // Build rich query string including conversational memory context
-      let contextualQuery = text;
-      if (contextMemory.subject || contextMemory.budget) {
-        const memContext = [
-          contextMemory.subject ? `Subject: ${contextMemory.subject}` : '',
-          contextMemory.budget ? `Budget limit: ₹${contextMemory.budget}` : '',
-          contextMemory.lastQuery ? `Previous request: ${contextMemory.lastQuery}` : ''
-        ].filter(Boolean).join('; ');
-        
-        contextualQuery = `[Context: ${memContext}]. User current request: "${text}"`;
+      // Process User Message through Intent Classifier & Conversation Engine
+      const response = await processUserMessage(
+        text,
+        contextMemory,
+        { user, cart, wishlist, orders }
+      );
+
+      clearTimeout(stepTimer1);
+      clearTimeout(stepTimer2);
+      clearTimeout(stepTimer3);
+      setThinkingStep('');
+
+      // Feature 15: Voice / Text Navigation Dispatch
+      if (response.action === 'NAVIGATE' && response.targetPath) {
+        toast.success(`Navigating to ${response.targetPath}...`, { icon: '🚀' });
+        navigate(response.targetPath);
       }
 
-      // Call existing public Gemini AI search endpoint
-      const res = await api.post('/ai/search', { query: contextualQuery });
+      // Update multi-turn cumulative context memory
+      if (response.memory) {
+        setContextMemory(response.memory);
+      }
 
-      // Generate conversational structure combining Gemini response with natural formatting
-      const fallbackEngine = generateConversationalResponse(text, contextMemory);
-      setContextMemory(fallbackEngine.memory);
-
-      const assistantMessage = {
-        id: (Date.now() + 1).toString(),
-        sender: 'assistant',
-        text: fallbackEngine.text || `Here are the top results I found for your request:`,
-        reasoning: res.data?.reasoning || fallbackEngine.reasoning,
-        recommendations: res.data?.recommendations || fallbackEngine.recommendations,
-        products: (res.data?.products && res.data.products.length > 0) ? res.data.products : fallbackEngine.products,
-        followUps: fallbackEngine.followUps,
-        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-      };
-
-      setMessages(prev => [...prev, assistantMessage]);
-    } catch (err) {
-      console.warn('AI API Search failure, invoking smart client-side catalog search fallback:', err);
+      // Feature 18: Streamed / Progressive Character Response Rendering
+      const assistantMsgId = (Date.now() + 1).toString();
+      const fullText = response.text || '';
       
-      const fallbackResult = generateConversationalResponse(text, contextMemory);
-      setContextMemory(fallbackResult.memory);
+      const assistantPlaceholder = {
+        id: assistantMsgId,
+        sender: 'assistant',
+        text: '',
+        reasoning: response.reasoning,
+        recommendations: response.recommendations,
+        products: response.products || [],
+        followUps: response.followUps || [],
+        intent: response.intent,
+        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+      };
 
+      setMessages(prev => [...prev, assistantPlaceholder]);
+      setIsLoading(false);
+
+      // Progressive character streaming loop
+      let charIdx = 0;
+      const chunkSize = Math.max(2, Math.floor(fullText.length / 25));
+      
+      const streamInterval = setInterval(() => {
+        charIdx += chunkSize;
+        const currentChunk = fullText.slice(0, charIdx);
+
+        setMessages(prev => prev.map(m => m.id === assistantMsgId ? { ...m, text: currentChunk } : m));
+
+        if (charIdx >= fullText.length) {
+          clearInterval(streamInterval);
+          setMessages(prev => prev.map(m => m.id === assistantMsgId ? { ...m, text: fullText } : m));
+          
+          // Feature 12: Read Response Aloud via Speech Synthesis
+          if (!isMuted) {
+            speak(fullText);
+          }
+        }
+      }, 25);
+
+    } catch (err) {
+      clearTimeout(stepTimer1);
+      clearTimeout(stepTimer2);
+      clearTimeout(stepTimer3);
+      setThinkingStep('');
+      console.error('Unhandled AI chat error:', err);
+      
+      // Feature 23: Friendly Error Handling
       const assistantMessage = {
         id: (Date.now() + 1).toString(),
         sender: 'assistant',
-        text: fallbackResult.text,
-        reasoning: fallbackResult.reasoning,
-        recommendations: fallbackResult.recommendations,
-        products: fallbackResult.products,
-        followUps: fallbackResult.followUps,
+        text: "I'm having trouble connecting right now. Please try again.",
+        products: [],
+        followUps: ["Try again", "Browse shop"],
         timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
       };
 
       setMessages(prev => [...prev, assistantMessage]);
-    } finally {
       setIsLoading(false);
     }
-  };
+  }, [isLoading, stopSpeaking, contextMemory, user, cart, wishlist, orders, navigate, isMuted, speak]);
+
+  // Handle Voice Input Transcript Submission automatically when voice recognition stops
+  useEffect(() => {
+    if (!isListening && transcript && transcript.trim().length > 1 && !isLoading) {
+      const voiceText = transcript.trim();
+      setTranscript('');
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      handleSendMessage(voiceText);
+    }
+  }, [isListening, transcript, isLoading, setTranscript, handleSendMessage]);
 
   const clearChat = () => {
+    stopSpeaking();
     setMessages([buildWelcomeMessage(firstName)]);
     setContextMemory({
       subject: '',
       budget: null,
       category: '',
-      lastQuery: ''
+      brand: '',
+      usage: '',
+      ram: '',
+      storage: '',
+      processor: '',
+      purpose: '',
+      lastQuery: '',
+      history: [],
+      lastProducts: []
     });
     toast.success('Conversation history cleared!');
   };
 
   return (
-    <div className={`flex flex-col bg-neutral-900/90 backdrop-blur-2xl border border-emerald-900/40 rounded-[2rem] shadow-[0_20px_60px_rgba(0,0,0,0.5)] hover:shadow-[0_20px_60px_rgba(16,185,129,0.12)] w-full ${containerHeight} overflow-hidden transition-all duration-500 relative`}>
-      {/* Header */}
-      <ChatHeader onClose={onClose} onClearChat={clearChat} hasMessages={messages.length > 1} />
+    <div className={`flex flex-col bg-neutral-950/95 backdrop-blur-2xl border border-emerald-900/40 rounded-[2rem] shadow-[0_20px_60px_rgba(0,0,0,0.5)] hover:shadow-[0_20px_60px_rgba(16,185,129,0.12)] w-full ${containerHeight} overflow-hidden transition-all duration-500 relative`}>
+      {/* Chat Header */}
+      <ChatHeader
+        onClose={onClose}
+        onClearChat={clearChat}
+        hasMessages={messages.length > 1}
+        isMuted={isMuted}
+        onToggleMute={toggleMute}
+        isSpeaking={isSpeaking}
+        isListening={isListening}
+      />
 
       {/* Internal Scrollable Message Container */}
       <div 
         ref={chatContainerRef}
-        className="flex-1 overflow-y-auto p-4 space-y-4 min-h-0 bg-gradient-to-b from-gray-900/30 to-black/40 scrollbar-thin scrollbar-thumb-emerald-900/50 scrollbar-track-transparent"
+        className="flex-1 overflow-y-auto p-4 space-y-4 min-h-0 bg-gradient-to-b from-gray-900/40 to-black/60 scrollbar-thin scrollbar-thumb-emerald-900/50 scrollbar-track-transparent"
       >
         {displayMessages.map((msg) => (
-          <ChatMessage key={msg.id} message={msg} onFollowUpClick={handleSendMessage} />
+          <ChatMessage
+            key={msg.id}
+            message={msg}
+            onFollowUpClick={handleSendMessage}
+            onSpeakMessage={speak}
+          />
         ))}
 
-        {/* Suggested Starter Chips (Show when only welcome message exists) */}
+        {/* Suggested Starter Chips */}
         {messages.length === 1 && (
           <div className="pl-9 pr-2 py-1 animate-in fade-in slide-in-from-bottom-2 duration-300">
             <SuggestedPrompts onPromptClick={handleSendMessage} />
           </div>
         )}
 
-        {/* Animated Typing Indicator */}
+        {/* Feature 16 & 17: Animated AI Thinking State & Steps */}
         {isLoading && (
           <div className="flex gap-2.5 items-start w-full animate-in fade-in duration-200">
             <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-emerald-700 to-green-600 text-white flex items-center justify-center text-xs shrink-0 select-none shadow-md border border-emerald-400/20 mt-0.5">
               🤖
             </div>
             <div className="bg-white/95 border border-emerald-900/10 rounded-2xl rounded-tl-none px-4 py-3 shadow-md text-xs text-gray-700 max-w-[80%] flex items-center gap-2">
-              <span className="font-semibold text-emerald-800 text-[11px]">NexaCart AI is thinking</span>
+              <span className="font-semibold text-emerald-800 text-[11px]">
+                {thinkingStep || 'NexaCart AI is thinking'}
+              </span>
               <div className="flex items-center gap-1">
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-bounce" style={{ animationDelay: '0ms' }}></span>
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-bounce" style={{ animationDelay: '150ms' }}></span>
@@ -330,13 +294,23 @@ const AIChatBox = ({ onClose, containerHeight = "h-[500px]" }) => {
             </div>
           </div>
         )}
+
+        {/* Voice Listening Active Indicator */}
+        {isListening && (
+          <div className="flex justify-center my-2">
+            <div className="bg-gradient-to-r from-amber-500 to-orange-500 text-black text-xs font-black px-4 py-2 rounded-full shadow-lg flex items-center gap-2 animate-bounce">
+              <Mic className="w-4 h-4 animate-pulse" />
+              <span>Listening to voice... Speak now!</span>
+            </div>
+          </div>
+        )}
       </div>
 
-      {/* Footer input area */}
-      <div className="p-3 border-t border-white/10 bg-neutral-950/80 backdrop-blur-md rounded-b-[2rem] space-y-2 shrink-0">
+      {/* Chat Input Footer */}
+      <div className="p-3 border-t border-white/10 bg-neutral-950/90 backdrop-blur-md rounded-b-[2rem] space-y-2 shrink-0">
         <div className="flex items-center justify-between text-[9px] text-gray-400 font-extrabold px-2">
           <span className="flex items-center gap-1 text-emerald-400">
-            <Sparkles className="w-3 h-3 text-emerald-400" /> Powered by Gemini AI
+            <Sparkles className="w-3 h-3 text-emerald-400" /> Conversational AI Voice Copilot
           </span>
           {messages.length > 1 && (
             <button 
@@ -348,7 +322,16 @@ const AIChatBox = ({ onClose, containerHeight = "h-[500px]" }) => {
             </button>
           )}
         </div>
-        <ChatInput onSendMessage={handleSendMessage} disabled={isLoading} />
+        <ChatInput
+          onSendMessage={handleSendMessage}
+          disabled={isLoading}
+          isListening={isListening}
+          startListening={startListening}
+          stopListening={stopListening}
+          transcript={transcript}
+          voiceError={voiceError}
+          isSupported={isSupported}
+        />
       </div>
     </div>
   );

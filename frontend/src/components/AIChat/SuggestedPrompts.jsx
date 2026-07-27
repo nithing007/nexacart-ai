@@ -2,11 +2,12 @@ import { Sparkles } from 'lucide-react';
 
 const SuggestedPrompts = ({ onPromptClick }) => {
   const prompts = [
-    "I'm buying a laptop",
-    "Compare iPhone & Samsung",
-    "Gift under ₹3,000",
-    "Budget of ₹50,000",
-    "Explain OLED screens"
+    "What is your name?",
+    "Explain OLED display",
+    "Gaming laptop under ₹70,000",
+    "Compare iPhone vs Samsung",
+    "I have ₹50,000 build a PC",
+    "Track my order"
   ];
 
   return (

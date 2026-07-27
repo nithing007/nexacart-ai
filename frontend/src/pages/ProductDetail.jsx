@@ -4,9 +4,9 @@ import { useParams, Link } from 'react-router-dom';
 import { fetchProductDetails, clearProductDetails } from '../redux/slices/productsSlice';
 import { addToCart } from '../redux/slices/cartSlice';
 import { addToWishlist, removeFromWishlist } from '../redux/slices/wishlistSlice';
-import { fetchWishlist } from '../redux/slices/wishlistSlice';
 import { Heart, ShoppingCart, Star, ArrowLeft, ShieldCheck, Truck, RefreshCw, Sparkles } from 'lucide-react';
 import { Button } from '../components/ui/button';
+import { Card } from '../components/ui/card';
 import { getFallbackImage } from '../utils/imageHelper';
 import api from '../services/api';
 import toast from 'react-hot-toast';
@@ -34,6 +34,7 @@ const ProductDetail = () => {
   // Fetch AI Recommendations based on category once product is loaded
   useEffect(() => {
     if (product && isAuthenticated) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setAiLoading(true);
       api.get(`/ai/recommendations`)
         .then((res) => {

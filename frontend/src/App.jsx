@@ -24,6 +24,18 @@ const BudgetAssistant = lazy(() => import('./pages/BudgetAssistant'));
 const AiRecommendations = lazy(() => import('./pages/AiRecommendations'));
 const UserDashboard = lazy(() => import('./pages/user/Dashboard'));
 const AdminDashboard = lazy(() => import('./pages/admin/Dashboard'));
+const AdminProfile = lazy(() => import('./pages/admin/AdminProfile'));
+const AdminSettings = lazy(() => import('./pages/admin/AdminSettings'));
+const AdminAIAnalytics = lazy(() => import('./pages/admin/AIAnalytics'));
+const AdminMissingRequests = lazy(() => import('./pages/admin/MissingRequests'));
+const AdminAILogs = lazy(() => import('./pages/admin/AIConversationLogs'));
+const AdminProductInsights = lazy(() => import('./pages/admin/AIProductInsights'));
+const AdminInventoryPrediction = lazy(() => import('./pages/admin/InventoryPrediction'));
+const AdminSmartCoupons = lazy(() => import('./pages/admin/SmartCoupons'));
+const AdminUserAnalytics = lazy(() => import('./pages/admin/UserAnalytics'));
+const AdminBudgetAnalytics = lazy(() => import('./pages/admin/BudgetAnalytics'));
+const AdminAIPerformance = lazy(() => import('./pages/admin/AIPerformance'));
+const AdminExportReports = lazy(() => import('./pages/admin/ExportReports'));
 
 // Layouts
 const MainLayout = lazy(() => import('./layouts/MainLayout'));
@@ -77,9 +89,21 @@ function App() {
             <Route path="user/dashboard" element={<UserDashboard />} />
           </Route>
 
-          {/* Admin Protected Routes */}
-          <Route path="/admin" element={<AdminLayout />}>
+          {/* Admin Protected BI Routes */}
+          <Route path="/admin" element={<ProtectedRoute adminOnly={true}><AdminLayout /></ProtectedRoute>}>
             <Route index element={<AdminDashboard />} />
+            <Route path="profile" element={<AdminProfile />} />
+            <Route path="settings" element={<AdminSettings />} />
+            <Route path="ai-analytics" element={<AdminAIAnalytics />} />
+            <Route path="missing-requests" element={<AdminMissingRequests />} />
+            <Route path="ai-logs" element={<AdminAILogs />} />
+            <Route path="product-insights" element={<AdminProductInsights />} />
+            <Route path="inventory-prediction" element={<AdminInventoryPrediction />} />
+            <Route path="smart-coupons" element={<AdminSmartCoupons />} />
+            <Route path="user-analytics" element={<AdminUserAnalytics />} />
+            <Route path="budget-analytics" element={<AdminBudgetAnalytics />} />
+            <Route path="ai-performance" element={<AdminAIPerformance />} />
+            <Route path="reports" element={<AdminExportReports />} />
           </Route>
         </Route>
       </Routes>

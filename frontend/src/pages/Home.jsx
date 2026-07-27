@@ -1,20 +1,15 @@
 import { useState, useEffect } from 'react';
-import { useDispatch, useSelector } from 'react-redux';
 import { Link, useNavigate } from 'react-router-dom';
-import { motion, AnimatePresence } from 'framer-motion';
 import { 
-  Sparkles, Wallet, Search, ArrowRight, CheckCircle2, 
-  Heart, ShoppingCart, Star, 
-  TrendingUp, ChevronRight 
+  Sparkles, Search, ArrowRight, CheckCircle2, 
+  TrendingUp, ChevronRight, GitCompare, LayoutList 
 } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { Card, CardContent } from '../components/ui/card';
-import { Input } from '../components/ui/input';
-import { addToCart } from '../redux/slices/cartSlice';
-import { addToWishlist, removeFromWishlist } from '../redux/slices/wishlistSlice';
-import { getFallbackImage } from '../utils/imageHelper';
 import AIChatBox from '../components/AIChat/AIChatBox';
-import api from '../services/api';
+import AIDiscovery from '../components/SmartShoppingHub/AIDiscovery';
+import AICompare from '../components/SmartShoppingHub/AICompare';
+import ShoppingPlanner from '../components/SmartShoppingHub/ShoppingPlanner';
 import toast from 'react-hot-toast';
 
 const AnimatedCounter = ({ value, duration = 1500 }) => {
@@ -64,32 +59,17 @@ const AnimatedCounter = ({ value, duration = 1500 }) => {
 };
 
 const Home = () => {
-  const dispatch = useDispatch();
   const navigate = useNavigate();
-  const { isAuthenticated } = useSelector((state) => state.auth);
-  const { products: wishlistProducts } = useSelector((state) => state.wishlist);
 
   useEffect(() => {
     window.scrollTo({ top: 0, behavior: 'instant' });
   }, []);
 
   // Active Tab for Smart Shopping Hub
-  const [activeHubTab, setActiveHubTab] = useState('search');
+  const [activeHubTab, setActiveHubTab] = useState('discovery');
 
-  // AI-Powered Search States
+  // Hero Search States
   const [searchQuery, setSearchQuery] = useState('');
-  const [searchLoading, setSearchLoading] = useState(false);
-  const [searchResults, setSearchResults] = useState(null);
-
-  // Personalized Picks States
-  const [picksLoading, setPicksLoading] = useState(false);
-  const [personalizedPicks, setPersonalizedPicks] = useState(null);
-
-  // Smart Budgeting States
-  const [budgetVal, setBudgetVal] = useState('');
-  const [budgetCat, setBudgetCat] = useState('All');
-  const [budgetLoading, setBudgetLoading] = useState(false);
-  const [budgetResults, setBudgetResults] = useState(null);
 
   // General Categories
   const categoriesList = [
@@ -99,115 +79,24 @@ const Home = () => {
     { name: 'Fashion', count: '2,150+ Items', image: 'https://images.unsplash.com/photo-1483985988355-763728e1935b?auto=format&fit=crop&w=300&q=80', color: 'from-pink-500 to-rose-600' }
   ];
 
-  const fetchPersonalizedPicks = async () => {
-    setPicksLoading(true);
-    try {
-      const res = await api.get('/ai/recommendations');
-      setPersonalizedPicks(res.data);
-    } catch {
-      toast.error('Failed to retrieve personalized recommendations');
-    } finally {
-      setPicksLoading(false);
-    }
-  };
-
-  // Auto-fetch personalized picks on tab select or login state
-  useEffect(() => {
-    if (activeHubTab === 'picks' && isAuthenticated) {
-      const timer = setTimeout(() => {
-        fetchPersonalizedPicks();
-      }, 0);
-      return () => clearTimeout(timer);
-    }
-  }, [activeHubTab, isAuthenticated]);
-
-  const triggerSearch = async (queryText) => {
-    setSearchLoading(true);
-    try {
-      const res = await api.get(`/ai/smart-search?q=${encodeURIComponent(queryText)}`);
-      setSearchResults(res.data);
-      setActiveHubTab('search');
-      const hubElement = document.getElementById('hub');
-      if (hubElement) {
-        hubElement.scrollIntoView({ behavior: 'smooth', block: 'start' });
-      }
-    } catch {
-      toast.error('AI Search failed to generate recommendations');
-    } finally {
-      setSearchLoading(false);
-    }
-  };
-
   const handleSmartSearch = async (e) => {
     if (e) e.preventDefault();
     if (!searchQuery.trim()) {
       toast.error('Please enter a natural search query');
       return;
     }
-    triggerSearch(searchQuery);
+    navigate(`/search?q=${encodeURIComponent(searchQuery.trim())}`);
   };
 
   const handleSuggestionClick = (queryText) => {
     setSearchQuery(queryText);
-    triggerSearch(queryText);
-  };
-
-  const handleBudgetAssistant = async (e) => {
-    e.preventDefault();
-    const amount = Number(budgetVal);
-    if (isNaN(amount) || amount <= 0) {
-      toast.error('Please enter a valid budget amount');
-      return;
-    }
-
-    setBudgetLoading(true);
-    try {
-      const res = await api.post('/ai/budget-assistant', { budget: amount, category: budgetCat });
-      setBudgetResults(res.data);
-    } catch {
-      toast.error('Budget analysis failed');
-    } finally {
-      setBudgetLoading(false);
-    }
-  };
-
-  const handleAddToCart = (product) => {
-    if (!isAuthenticated) {
-      toast.error('Please log in to add items to cart');
-      navigate('/login');
-      return;
-    }
-    dispatch(addToCart({ productId: product._id, quantity: 1 }))
-      .unwrap()
-      .then(() => toast.success(`Added ${product.name} to cart`))
-      .catch(() => toast.error('Failed to add item to cart'));
-  };
-
-  const handleWishlistToggle = (product) => {
-    if (!isAuthenticated) {
-      toast.error('Please log in to manage your wishlist');
-      navigate('/login');
-      return;
-    }
-
-    const isWishlisted = wishlistProducts.some((item) => item._id === product._id);
-    if (isWishlisted) {
-      dispatch(removeFromWishlist(product._id))
-        .unwrap()
-        .then(() => toast.success(`Removed ${product.name} from wishlist`))
-        .catch(() => toast.error('Failed to update wishlist'));
-    } else {
-      dispatch(addToWishlist(product._id))
-        .unwrap()
-        .then(() => toast.success(`Added ${product.name} to wishlist`))
-        .catch(() => toast.error('Failed to update wishlist'));
-    }
+    navigate(`/search?q=${encodeURIComponent(queryText.trim())}`);
   };
 
   return (
     <div className="space-y-20 pb-12">
       
-      {/* 1. Hero Section Redesign */}
+      {/* 1. Hero Section */}
       <section className="bg-gradient-to-br from-green-950 via-neutral-950 to-black rounded-[28px] p-8 md:p-12 lg:p-16 flex flex-col items-center gap-8 md:gap-12 shadow-[0_20px_50px_rgba(8,112,65,0.15)] border border-emerald-900/30 relative overflow-hidden">
         
         {/* Animated Glow Backdrops */}
@@ -215,7 +104,7 @@ const Home = () => {
         <div className="absolute bottom-0 left-0 w-96 h-96 bg-green-500/10 rounded-full blur-[100px] -ml-20 -mb-20 pointer-events-none"></div>
         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[300px] bg-emerald-500/5 rounded-full blur-[120px] pointer-events-none"></div>
 
-        {/* Small Badge - Above both columns */}
+        {/* Small Badge */}
         <div className="w-full flex justify-center lg:justify-start z-10 pt-2 lg:pt-4">
           <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs font-semibold shadow-inner hover:scale-105 transition-transform duration-300">
             <Sparkles className="w-3.5 h-3.5 text-emerald-400 animate-pulse" /> AI-Powered Shopping Platform
@@ -251,15 +140,10 @@ const Home = () => {
                 />
                 <button
                   type="submit"
-                  disabled={searchLoading}
-                  className="absolute right-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-full px-5 py-2.5 text-xs font-bold transition-all duration-300 disabled:opacity-50 flex items-center gap-1.5 shadow-md hover:scale-105 active:scale-95"
+                  className="absolute right-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-full px-5 py-2.5 text-xs font-bold transition-all duration-300 flex items-center gap-1.5 shadow-md hover:scale-105 active:scale-95"
                 >
-                  {searchLoading ? 'Searching...' : (
-                    <>
-                      <span>Ask AI</span>
-                      <Sparkles className="w-3.5 h-3.5 animate-pulse" />
-                    </>
-                  )}
+                  <span>Ask AI</span>
+                  <Sparkles className="w-3.5 h-3.5 animate-pulse" />
                 </button>
               </div>
             </form>
@@ -294,7 +178,7 @@ const Home = () => {
 
           </div>
 
-          {/* Embedded Conversational AI Assistant (Right Column - 45%) - Hidden on mobile, visible on desktop */}
+          {/* Embedded Conversational AI Assistant (Right Column - 45%) */}
           <div className="hidden lg:flex lg:w-[45%] z-10 w-full justify-center items-center">
             <div className="w-full max-w-md hover:scale-[1.01] transition-transform duration-300">
               <AIChatBox containerHeight="h-[480px]" />
@@ -308,9 +192,9 @@ const Home = () => {
       {/* Features Row */}
       <section className="grid grid-cols-2 md:grid-cols-4 gap-4">
         {[
-          { icon: <Search className="text-green-600" />, title: "AI-Powered Search", desc: "Natural language catalog lookup", color: "bg-green-50" },
-          { icon: <Sparkles className="text-purple-600" />, title: "Personalized Picks", desc: "Catalog matching based on history", color: "bg-purple-50" },
-          { icon: <Wallet className="text-orange-600" />, title: "Smart Budgeting", desc: "Curated shopping baskets in limit", color: "bg-orange-50" },
+          { icon: <Sparkles className="text-emerald-600" />, title: "AI Discovery", desc: "Natural language discovery & advice", color: "bg-emerald-50" },
+          { icon: <GitCompare className="text-purple-600" />, title: "AI Compare", desc: "Side-by-side spec comparison", color: "bg-purple-50" },
+          { icon: <LayoutList className="text-orange-600" />, title: "Shopping Planner", desc: "Scenario-based shopping lists", color: "bg-orange-50" },
           { icon: <CheckCircle2 className="text-blue-600" />, title: "Fast Checkout", desc: "Secure orders & quick logistics", color: "bg-blue-50" }
         ].map((feat, i) => (
           <Card key={i} className="border-none shadow-sm hover:shadow-md transition-shadow rounded-2xl">
@@ -325,29 +209,29 @@ const Home = () => {
         ))}
       </section>
 
-      {/* 2. Smart Shopping Hub */}
-      <section id="hub" className="space-y-6 bg-white p-8 rounded-3xl border border-gray-100 shadow-sm">
+      {/* 2. Redesigned Smart Shopping Hub */}
+      <section id="hub" className="space-y-6 bg-white p-6 sm:p-8 rounded-3xl border border-gray-100 shadow-sm">
         <div className="flex flex-col md:flex-row md:items-center justify-between border-b border-gray-100 pb-4 gap-4">
           <div className="space-y-1">
             <h2 className="text-2xl font-black text-gray-900 flex items-center gap-2">
-              <Sparkles className="text-green-600" /> Smart Shopping Hub
+              <Sparkles className="text-emerald-600" /> Smart Shopping Hub
             </h2>
-            <p className="text-gray-500 text-sm">Experience our real OpenAI-powered assistant components below.</p>
+            <p className="text-gray-500 text-sm">Experience our specialized Gemini-powered AI features below.</p>
           </div>
 
-          {/* Hub Tab Switchers */}
-          <div className="flex bg-gray-50 p-1.5 rounded-2xl border border-gray-100 w-fit">
+          {/* Redesigned Hub Tab Switchers */}
+          <div className="flex bg-gray-50 p-1.5 rounded-2xl border border-gray-100 w-full sm:w-fit overflow-x-auto">
             {[
-              { id: 'search', label: 'AI Search', icon: <Search className="w-4 h-4" /> },
-              { id: 'picks', label: 'Personalized Picks', icon: <Sparkles className="w-4 h-4" /> },
-              { id: 'budget', label: 'Smart Budgeting', icon: <Wallet className="w-4 h-4" /> }
+              { id: 'discovery', label: 'AI Discovery', icon: <Sparkles className="w-4 h-4" /> },
+              { id: 'compare', label: 'AI Compare', icon: <GitCompare className="w-4 h-4" /> },
+              { id: 'planner', label: 'Shopping Planner', icon: <LayoutList className="w-4 h-4" /> }
             ].map((tab) => (
               <button
                 key={tab.id}
                 onClick={() => setActiveHubTab(tab.id)}
-                className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold transition-all ${
+                className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${
                   activeHubTab === tab.id
-                    ? 'bg-white text-green-700 font-extrabold shadow-sm'
+                    ? 'bg-white text-emerald-700 font-extrabold shadow-sm'
                     : 'text-gray-500 hover:text-gray-800'
                 }`}
               >
@@ -358,366 +242,11 @@ const Home = () => {
           </div>
         </div>
 
-        {/* Tab Contents */}
-        <div className="pt-4 min-h-[300px]">
-          
-          {/* Tab 1: AI Search */}
-          {activeHubTab === 'search' && (
-            <div className="space-y-6">
-              <div className="max-w-2xl mx-auto text-center space-y-4">
-                <h3 className="font-extrabold text-gray-800 text-lg">Natural Language Product Search</h3>
-                <p className="text-gray-500 text-xs sm:text-sm">
-                  Describe what you are looking for in natural English (e.g. category, budget limits, user traits). Our AI mappings will resolve the best choices.
-                </p>
-                <form onSubmit={handleSmartSearch} className="flex gap-2 relative">
-                  <Input 
-                    type="text" 
-                    placeholder="Describe what you want (e.g., 'Best gaming laptop for students under 150000')" 
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    className="bg-gray-50 border-gray-200 py-6 pr-12 rounded-xl text-xs sm:text-sm focus:bg-white"
-                  />
-                  <Button type="submit" disabled={searchLoading} className="bg-green-600 hover:bg-green-700 text-white rounded-xl py-6 font-bold text-xs shrink-0 px-6">
-                    {searchLoading ? 'Searching...' : 'Search'}
-                  </Button>
-                </form>
-
-                {/* Example Quick queries */}
-                <div className="flex flex-wrap items-center justify-center gap-2 pt-1 text-[11px] text-gray-400 font-medium">
-                  <span>Try:</span>
-                  {[
-                    "Best phone under ₹20000",
-                    "Gaming laptop for students",
-                    "Running shoes under ₹3000",
-                    "Budget office setup"
-                  ].map((example, i) => (
-                    <button 
-                      key={i}
-                      type="button"
-                      onClick={() => { setSearchQuery(example); }}
-                      className="px-3 py-1 bg-gray-50 hover:bg-green-50 text-gray-500 hover:text-green-700 border border-gray-100 rounded-full transition-colors"
-                    >
-                      {example}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* AI Search Results Panel */}
-              <AnimatePresence mode="wait">
-                {searchResults && (
-                  <motion.div 
-                    initial={{ opacity: 0, y: 15 }} 
-                    animate={{ opacity: 1, y: 0 }} 
-                    exit={{ opacity: 0 }}
-                    className="bg-gray-50/50 p-6 rounded-3xl border border-gray-100 space-y-6"
-                  >
-                    {/* Insights Block */}
-                    <div className="bg-green-50/50 p-5 rounded-2xl border border-green-100 space-y-2">
-                      <h4 className="text-xs font-black text-green-950 flex items-center gap-1.5 uppercase tracking-wider">
-                        <Sparkles className="w-4 h-4 text-green-600 animate-pulse" /> AI Assistant Reasoning
-                      </h4>
-                      <p className="text-xs sm:text-sm text-green-900 leading-relaxed italic">
-                        "{searchResults.reasoning}"
-                      </p>
-                      {searchResults.recommendations && (
-                        <p className="text-[11px] text-gray-400 font-medium pl-6">
-                          Advice: {searchResults.recommendations}
-                        </p>
-                      )}
-                    </div>
-
-                    {/* Products list grid */}
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                      {searchResults.products.map((product) => {
-                        const isWishlisted = wishlistProducts.some((item) => item._id === product._id);
-                        return (
-                          <Card key={product._id} className="border-gray-100 rounded-2xl bg-white overflow-hidden flex flex-col justify-between group relative">
-                            {/* Wishlist */}
-                            <button 
-                              onClick={() => handleWishlistToggle(product)}
-                              className="absolute top-2 right-2 z-10 p-1.5 rounded-full bg-white/90 shadow-sm text-gray-400 hover:text-red-500"
-                            >
-                              <Heart className={`w-3.5 h-3.5 ${isWishlisted ? 'fill-red-500 text-red-500' : ''}`} />
-                            </button>
-
-                            <Link to={`/products/${product._id}`} className="bg-gray-50 p-3 h-28 flex items-center justify-center">
-                              <img 
-                                src={product.image} 
-                                alt={product.name} 
-                                className="object-contain h-full max-h-full"
-                                onError={(e) => { e.target.src = getFallbackImage(product.category, product.name); }}
-                              />
-                            </Link>
-
-                            <CardContent className="p-4 flex flex-col justify-between flex-grow space-y-2">
-                              <div>
-                                <span className="text-[9px] uppercase font-bold text-green-600 bg-green-50 px-2 py-0.5 rounded">
-                                  {product.category}
-                                </span>
-                                <Link to={`/products/${product._id}`} className="block mt-1 font-bold text-xs text-gray-800 hover:text-green-600 line-clamp-1">
-                                  {product.name}
-                                </Link>
-                              </div>
-                              <div className="flex items-center justify-between border-t border-gray-50 pt-2">
-                                <span className="font-extrabold text-sm text-gray-900">₹{product.price.toLocaleString()}</span>
-                                <button 
-                                  onClick={() => handleAddToCart(product)}
-                                  className="w-7 h-7 rounded-full bg-green-50 text-green-600 hover:bg-green-600 hover:text-white flex items-center justify-center transition-all"
-                                  title="Add to Cart"
-                                >
-                                  <ShoppingCart className="w-3.5 h-3.5" />
-                                </button>
-                              </div>
-                            </CardContent>
-                          </Card>
-                        );
-                      })}
-                    </div>
-
-                  </motion.div>
-                )}
-              </AnimatePresence>
-
-            </div>
-          )}
-
-          {/* Tab 2: Personalized Picks */}
-          {activeHubTab === 'picks' && (
-            <div className="space-y-6">
-              {!isAuthenticated ? (
-                <div className="max-w-md mx-auto text-center space-y-4 py-8">
-                  <div className="w-16 h-16 bg-purple-50 rounded-full flex items-center justify-center mx-auto text-purple-500">
-                    <Sparkles className="w-8 h-8" />
-                  </div>
-                  <h3 className="font-bold text-gray-800 text-lg">Personalized AI Picks</h3>
-                  <p className="text-gray-500 text-xs sm:text-sm">
-                    Log in to analyze your browsing history, cart lists, and wishlist selections for tailored recommendations.
-                  </p>
-                  <Link to="/login">
-                    <Button className="bg-purple-600 hover:bg-purple-700 text-white rounded-xl">Login Now</Button>
-                  </Link>
-                </div>
-              ) : picksLoading ? (
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 animate-pulse">
-                  {[1, 2, 3, 4].map(n => (
-                    <div key={n} className="bg-gray-50 rounded-2xl h-48"></div>
-                  ))}
-                </div>
-              ) : personalizedPicks ? (
-                <div className="space-y-6">
-                  {/* Reasoning */}
-                  <div className="bg-purple-50/80 p-5 rounded-2xl border border-purple-100 space-y-1.5">
-                    <h4 className="text-xs font-black text-purple-950 flex items-center gap-1.5 uppercase tracking-wider">
-                      <Sparkles className="w-4 h-4 text-purple-600 animate-pulse" /> Personalized Recommendations
-                    </h4>
-                    <p className="text-xs sm:text-sm text-purple-900 leading-relaxed italic">
-                      "{personalizedPicks.reasoning}"
-                    </p>
-                  </div>
-
-                  {/* Recommendations list */}
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                    {(personalizedPicks.recommendations || []).map((product) => {
-                      const isWishlisted = wishlistProducts.some((item) => item._id === product._id);
-                      return (
-                        <Card key={product._id} className="border-gray-100 rounded-2xl bg-white overflow-hidden flex flex-col justify-between group relative">
-                          <button 
-                            onClick={() => handleWishlistToggle(product)}
-                            className="absolute top-2 right-2 z-10 p-1.5 rounded-full bg-white/90 shadow-sm text-gray-400 hover:text-red-500"
-                          >
-                            <Heart className={`w-3.5 h-3.5 ${isWishlisted ? 'fill-red-500 text-red-500' : ''}`} />
-                          </button>
-
-                          <Link to={`/products/${product._id}`} className="bg-gray-50 p-3 h-28 flex items-center justify-center">
-                            <img 
-                              src={product.image} 
-                              alt={product.name} 
-                              className="object-contain h-full max-h-full"
-                              onError={(e) => { e.target.src = getFallbackImage(product.category, product.name); }}
-                            />
-                          </Link>
-
-                          <CardContent className="p-4 flex flex-col justify-between flex-grow space-y-2">
-                            <div>
-                              <span className="text-[9px] uppercase font-bold text-purple-600 bg-purple-50 px-2 py-0.5 rounded border border-purple-100/50">
-                                {product.category}
-                              </span>
-                              <Link to={`/products/${product._id}`} className="block mt-1 font-bold text-xs text-gray-800 hover:text-purple-600 line-clamp-1">
-                                {product.name}
-                              </Link>
-                            </div>
-                            <div className="flex items-center justify-between border-t border-gray-50 pt-2">
-                              <span className="font-extrabold text-sm text-gray-900">₹{product.price.toLocaleString()}</span>
-                              <button 
-                                onClick={() => handleAddToCart(product)}
-                                className="w-7 h-7 rounded-full bg-purple-50 text-purple-600 hover:bg-purple-600 hover:text-white flex items-center justify-center transition-all"
-                                title="Add to Cart"
-                              >
-                                <ShoppingCart className="w-3.5 h-3.5" />
-                              </button>
-                            </div>
-                          </CardContent>
-                        </Card>
-                      );
-                    })}
-                  </div>
-                  
-                  <div className="text-right">
-                    <Link to="/ai-recommendations" className="inline-flex items-center gap-1 text-xs text-purple-600 font-bold hover:underline">
-                      See full dashboard <ChevronRight className="w-4 h-4" />
-                    </Link>
-                  </div>
-                </div>
-              ) : (
-                <div className="text-center py-12 text-gray-400">
-                  Click 'Fetch recommendations' to run AI Picks logic.
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* Tab 3: Smart Budgeting */}
-          {activeHubTab === 'budget' && (
-            <div className="space-y-8">
-              {!isAuthenticated ? (
-                <div className="max-w-md mx-auto text-center space-y-4 py-8">
-                  <div className="w-16 h-16 bg-orange-50 rounded-full flex items-center justify-center mx-auto text-orange-500">
-                    <Wallet className="w-8 h-8" />
-                  </div>
-                  <h3 className="font-bold text-gray-800 text-lg">Smart Budget Assistant</h3>
-                  <p className="text-gray-500 text-xs sm:text-sm">
-                    Please log in to curate product bundles fitting your budget and view calculated savings insights.
-                  </p>
-                  <Link to="/login">
-                    <Button className="bg-orange-600 hover:bg-orange-700 text-white rounded-xl">Login Now</Button>
-                  </Link>
-                </div>
-              ) : (
-                <div className="space-y-6">
-                  {/* Budget form */}
-                  <form onSubmit={handleBudgetAssistant} className="flex flex-col sm:flex-row items-end gap-4 max-w-xl mx-auto bg-gray-50 p-5 rounded-2xl border border-gray-100">
-                    <div className="flex-1 space-y-2 text-left">
-                      <label className="text-xs font-bold text-gray-600 block">Total Budget (₹)</label>
-                      <Input 
-                        type="number" 
-                        placeholder="e.g., 20000"
-                        value={budgetVal}
-                        onChange={(e) => setBudgetVal(e.target.value)}
-                        className="bg-white border-gray-200"
-                        required
-                      />
-                    </div>
-                    <div className="w-full sm:w-40 space-y-2 text-left">
-                      <label className="text-xs font-bold text-gray-600 block">Category</label>
-                      <select 
-                        value={budgetCat}
-                        onChange={(e) => setBudgetCat(e.target.value)}
-                        className="w-full h-10 px-3 bg-white border border-gray-200 rounded-md text-xs sm:text-sm focus:outline-none"
-                      >
-                        {['All', 'Electronics', 'Groceries', 'Home & Office', 'Fashion'].map(cat => (
-                          <option key={cat} value={cat}>{cat}</option>
-                        ))}
-                      </select>
-                    </div>
-                    <Button type="submit" disabled={budgetLoading} className="bg-orange-600 hover:bg-orange-700 text-white font-bold w-full sm:w-auto h-10">
-                      {budgetLoading ? 'Analyzing...' : 'Calculate'}
-                    </Button>
-                  </form>
-
-                  {/* Budget Results */}
-                  <AnimatePresence mode="wait">
-                    {budgetResults && (
-                      <motion.div 
-                        initial={{ opacity: 0, y: 15 }} 
-                        animate={{ opacity: 1, y: 0 }} 
-                        exit={{ opacity: 0 }}
-                        className="grid grid-cols-1 md:grid-cols-3 gap-6 items-start text-left"
-                      >
-                        {/* Selected items */}
-                        <div className="md:col-span-2 space-y-3">
-                          <h4 className="font-bold text-sm text-gray-800">Allocated Bundle</h4>
-                          <div className="space-y-3">
-                            {budgetResults.items.map((item) => (
-                              <Card key={item._id} className="border-gray-100 rounded-2xl bg-white overflow-hidden shadow-sm">
-                                <CardContent className="p-3.5 flex items-center gap-3">
-                                  <div className="w-12 h-12 bg-gray-50 rounded-lg p-1 border border-gray-100 flex items-center justify-center shrink-0">
-                                    <img 
-                                      src={item.image} 
-                                      alt={item.name} 
-                                      className="object-contain max-h-full"
-                                      onError={(e) => { e.target.src = getFallbackImage(item.category, item.name); }}
-                                    />
-                                  </div>
-                                  <div className="flex-grow space-y-0.5 text-xs">
-                                    <p className="font-bold text-gray-800 line-clamp-1">{item.name}</p>
-                                    <p className="text-green-600 font-extrabold">₹{item.price.toLocaleString()}</p>
-                                  </div>
-                                  <button 
-                                    onClick={() => handleAddToCart(item)}
-                                    className="p-2 rounded-full bg-green-50 text-green-600 hover:bg-green-600 hover:text-white transition-colors shrink-0"
-                                    title="Add to Cart"
-                                  >
-                                    <ShoppingCart className="w-3.5 h-3.5" />
-                                  </button>
-                                </CardContent>
-                              </Card>
-                            ))}
-                          </div>
-                        </div>
-
-                        {/* Calculations & Advice */}
-                        <div className="space-y-4">
-                          <Card className="border-gray-100 rounded-2xl shadow-sm bg-white overflow-hidden">
-                            <CardContent className="p-5 space-y-4">
-                              <h4 className="font-bold text-gray-800 text-xs uppercase tracking-wider border-b pb-2">Analysis</h4>
-                              <div className="space-y-2 text-xs text-gray-600">
-                                <div className="flex justify-between">
-                                  <span>Total Cost</span>
-                                  <span className="font-bold text-gray-900">₹{budgetResults.totalCost.toLocaleString()}</span>
-                                </div>
-                                <div className="flex justify-between">
-                                  <span>Remaining</span>
-                                  <span className="font-bold text-gray-900">₹{budgetResults.remaining.toLocaleString()}</span>
-                                </div>
-                                {budgetResults.estimatedSavings > 0 && (
-                                  <div className="flex justify-between text-green-600 font-bold">
-                                    <span>Discount Saved</span>
-                                    <span>₹{budgetResults.estimatedSavings.toLocaleString()}</span>
-                                  </div>
-                                )}
-                              </div>
-
-                              {/* Progress bar */}
-                              <div className="space-y-1">
-                                <div className="w-full bg-gray-100 rounded-full h-2.5 overflow-hidden">
-                                  <div 
-                                    className="bg-green-500 h-full rounded-full transition-all"
-                                    style={{ width: `${Math.round((budgetResults.totalCost / budgetResults.budget) * 100)}%` }}
-                                  ></div>
-                                </div>
-                              </div>
-                            </CardContent>
-                          </Card>
-
-                          {/* AI Budget Advice */}
-                          <div className="bg-purple-50 p-4 rounded-2xl border border-purple-100 space-y-2 text-xs">
-                            <h5 className="font-bold text-purple-950 flex items-center gap-1">
-                              <Sparkles className="w-3.5 h-3.5 text-purple-600" /> AI Advice
-                            </h5>
-                            {budgetResults.aiTips.map((tip, index) => (
-                              <p key={index} className="text-purple-900 leading-relaxed italic">&bull; {tip}</p>
-                            ))}
-                          </div>
-                        </div>
-                      </motion.div>
-                    )}
-                  </AnimatePresence>
-                </div>
-              )}
-            </div>
-          )}
-
+        {/* Tab Contents with Smooth Transition */}
+        <div className="pt-2 min-h-[350px]">
+          {activeHubTab === 'discovery' && <AIDiscovery />}
+          {activeHubTab === 'compare' && <AICompare />}
+          {activeHubTab === 'planner' && <ShoppingPlanner />}
         </div>
       </section>
 
@@ -725,10 +254,10 @@ const Home = () => {
       <section className="space-y-6">
         <div className="flex justify-between items-center">
           <h2 className="text-2xl font-black text-gray-900 flex items-center gap-2">
-            <TrendingUp className="text-green-600 w-6 h-6" /> Trending Categories
+            <TrendingUp className="text-emerald-600 w-6 h-6" /> Trending Categories
           </h2>
           <Link to="/products">
-            <Button variant="link" className="text-green-600 font-bold flex items-center gap-1">
+            <Button variant="link" className="text-emerald-600 font-bold flex items-center gap-1">
               Explore All <ChevronRight className="w-4 h-4" />
             </Button>
           </Link>
@@ -739,7 +268,7 @@ const Home = () => {
             <div 
               key={i}
               onClick={() => navigate(`/products?category=${cat.name}`)}
-              className="bg-white rounded-3xl border border-gray-100 shadow-sm hover:shadow-xl hover:border-green-300/80 hover:-translate-y-2 transition-all duration-300 ease-out overflow-hidden cursor-pointer group flex flex-col justify-between h-56"
+              className="bg-white rounded-3xl border border-gray-100 shadow-sm hover:shadow-xl hover:border-emerald-300/80 hover:-translate-y-2 transition-all duration-300 ease-out overflow-hidden cursor-pointer group flex flex-col justify-between h-56"
             >
               {/* Category Image */}
               <div className="h-2/3 bg-gray-50 overflow-hidden relative">
@@ -757,7 +286,7 @@ const Home = () => {
                   <h3 className="font-extrabold text-sm text-gray-800">{cat.name}</h3>
                   <p className="text-[10px] text-gray-400 font-semibold">{cat.count}</p>
                 </div>
-                <div className="w-7 h-7 rounded-full bg-green-50 text-green-600 flex items-center justify-center group-hover:bg-green-600 group-hover:text-white transition-colors">
+                <div className="w-7 h-7 rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center group-hover:bg-emerald-600 group-hover:text-white transition-colors">
                   <ChevronRight className="w-4 h-4" />
                 </div>
               </div>
@@ -775,9 +304,9 @@ const Home = () => {
 
         <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
           {[
-            { title: "Natural AI Search", desc: "No more scrolling endlessly. Describe what you need in plain words, and our system maps matching items instantly.", icon: <Search className="w-6 h-6 text-green-600" /> },
-            { title: "Smart Budgeting", desc: "Define your total purchase limit and shop category. Our assistant automatically curates packages matching your budget.", icon: <Wallet className="w-6 h-6 text-purple-600" /> },
-            { title: "Personalized Shopping", desc: "Enjoy recommendations custom tailored to your exact tastes based on wishlists, cart lists, and user tags.", icon: <Sparkles className="w-6 h-6 text-orange-600" /> },
+            { title: "AI Product Discovery", desc: "No more scrolling endlessly. Describe what you need in plain words, and our system maps matching items instantly.", icon: <Sparkles className="w-6 h-6 text-emerald-600" /> },
+            { title: "AI Compare", desc: "Evaluate products side-by-side with Gemini AI breakdown of key differences, pros, cons, and recommendations.", icon: <GitCompare className="w-6 h-6 text-purple-600" /> },
+            { title: "Shopping Planner", desc: "Describe your scenario (apartment, hostel, gaming setup), and our AI curates a complete shopping list.", icon: <LayoutList className="w-6 h-6 text-orange-600" /> },
             { title: "Instant Checkout", desc: "Secure transaction channels, robust address pre-fills, and instant payment validation mechanisms.", icon: <CheckCircle2 className="w-6 h-6 text-blue-600" /> }
           ].map((perk, idx) => (
             <div key={idx} className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm text-center space-y-3">
@@ -789,10 +318,10 @@ const Home = () => {
         </div>
       </section>
 
-      {/* 5. AI Shopping Insights (Stats dashboard) */}
-      <section className="bg-gradient-to-tr from-green-50 to-emerald-50 border border-green-100 rounded-3xl p-8 md:p-10 flex flex-col md:flex-row items-center justify-between gap-8">
+      {/* 5. AI Shopping Insights */}
+      <section className="bg-gradient-to-tr from-emerald-50 to-green-50 border border-emerald-100 rounded-3xl p-8 md:p-10 flex flex-col md:flex-row items-center justify-between gap-8">
         <div className="space-y-3 max-w-sm text-center md:text-left">
-          <span className="bg-green-200 text-green-800 text-[10px] font-black px-2.5 py-1 rounded-full uppercase tracking-wider">
+          <span className="bg-emerald-200 text-emerald-800 text-[10px] font-black px-2.5 py-1 rounded-full uppercase tracking-wider">
             Shopping Dashboard
           </span>
           <h2 className="text-2xl font-black text-gray-900">AI Shopping Insights</h2>
@@ -801,45 +330,20 @@ const Home = () => {
           </p>
         </div>
 
-        <div className="flex-1 grid grid-cols-3 gap-4 text-center">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 w-full md:w-auto">
           {[
-            { value: "₹1,850", label: "Avg. Monthly Savings" },
-            { value: "12,450+", label: "Products Curated" },
-            { value: "98.4%", label: "Satisfaction Rate" }
-          ].map((stat, i) => (
-            <div key={i} className="bg-white p-4 rounded-2xl border border-green-100/50 shadow-sm hover:shadow-md hover:scale-[1.03] transition-all duration-300 space-y-1">
-              <span className="text-xl md:text-2xl font-black text-green-700 block">
+            { label: "Time Saved", value: "65%", sub: "Faster discovery" },
+            { label: "Avg. Savings", value: "₹4,200", sub: "Per shopping basket" },
+            { label: "AI Recommendations", value: "98%+", sub: "User satisfaction" }
+          ].map((stat, idx) => (
+            <div key={idx} className="bg-white p-6 rounded-2xl border border-emerald-100 shadow-sm text-center space-y-1">
+              <span className="font-black text-2xl text-emerald-700">
                 <AnimatedCounter value={stat.value} />
               </span>
-              <span className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">{stat.label}</span>
+              <p className="font-bold text-xs text-gray-800">{stat.label}</p>
+              <p className="text-[10px] text-gray-400 font-medium">{stat.sub}</p>
             </div>
           ))}
-        </div>
-      </section>
-
-      {/* Premium Ready to Experience AI Shopping CTA */}
-      <section className="bg-gradient-to-tr from-green-950 via-emerald-950 to-gray-950 text-white rounded-[2rem] p-12 md:p-16 text-center border border-emerald-900/30 shadow-2xl relative overflow-hidden">
-        {/* Glow Effects */}
-        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[500px] h-[500px] bg-green-500/10 rounded-full blur-3xl pointer-events-none"></div>
-        <div className="absolute bottom-0 right-0 w-80 h-80 bg-emerald-500/5 rounded-full blur-3xl pointer-events-none"></div>
-
-        <div className="max-w-2xl mx-auto space-y-6 z-10 relative">
-          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs font-bold uppercase tracking-wider">
-            <Sparkles className="w-3.5 h-3.5 text-emerald-400 animate-pulse" /> Next-Gen E-Commerce
-          </div>
-          <h2 className="text-3xl md:text-5xl font-black tracking-tight leading-tight">
-            Ready to Experience <span className="bg-gradient-to-r from-green-400 to-emerald-300 bg-clip-text text-transparent">AI Shopping</span>?
-          </h2>
-          <p className="text-gray-300 text-sm md:text-base leading-relaxed font-medium">
-            Discover smarter shopping using AI-powered recommendations, conversational shopping assistance, budget intelligence, and personalized product discovery.
-          </p>
-          <div className="pt-4 flex justify-center">
-            <Link to="/products">
-              <Button size="lg" className="bg-green-600 hover:bg-green-700 text-white rounded-full px-10 font-bold shadow-lg shadow-green-950/50 hover:scale-105 transition-all duration-300 py-6">
-                Start Shopping <ArrowRight className="w-4.5 h-4.5 ml-2" />
-              </Button>
-            </Link>
-          </div>
         </div>
       </section>
 

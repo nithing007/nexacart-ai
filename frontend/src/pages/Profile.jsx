@@ -24,6 +24,7 @@ const Profile = () => {
   // Prefill dob if it exists and format correctly for HTML input type="date" (YYYY-MM-DD)
   useEffect(() => {
     if (user) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setFirstName(user.firstName || '');
       setLastName(user.lastName || '');
       setPhoneNumber(user.phoneNumber || '');

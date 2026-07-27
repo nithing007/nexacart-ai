@@ -16,8 +16,14 @@ const ProtectedRoute = ({ children, adminOnly = false }) => {
     return <Navigate to="/login" replace />;
   }
 
+  // If page requires Admin role, but user is not admin -> redirect to customer dashboard
   if (adminOnly && user?.role !== 'admin') {
-    return <Navigate to="/" replace />;
+    return <Navigate to="/user/dashboard" replace />;
+  }
+
+  // If authenticated user is an Admin, but attempting to access customer dashboard -> redirect to /admin
+  if (!adminOnly && user?.role === 'admin') {
+    return <Navigate to="/admin" replace />;
   }
 
   return children ? children : <Outlet />;

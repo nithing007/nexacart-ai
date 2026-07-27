@@ -1,16 +1,16 @@
+import { useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { Link, useNavigate } from 'react-router-dom';
-import { Heart, ShoppingCart, Star, Sparkles, Check, X } from 'lucide-react';
+import { Heart, ShoppingCart, Star, Sparkles, Check, X, ArrowRight, Volume2, VolumeX, Eye } from 'lucide-react';
 import { addToCart } from '../../redux/slices/cartSlice';
 import { addToWishlist, removeFromWishlist } from '../../redux/slices/wishlistSlice';
 import { getFallbackImage } from '../../utils/imageHelper';
 import toast from 'react-hot-toast';
 
-// Helper to format text with Markdown bold (**text**), bullet points, and checkmarks
+// Helper to format text with Markdown bold (**text**), bullet points, checkmarks & section headers
 const FormattedText = ({ content }) => {
   if (!content) return null;
 
-  // Split content into lines for structured paragraph and list rendering
   const lines = content.split('\n');
 
   return (
@@ -45,7 +45,7 @@ const FormattedText = ({ content }) => {
           );
         }
 
-        // Pros / Cons or Checkmarks
+        // Pros / Cons / Checkmarks
         if (trimmed.startsWith('✔') || trimmed.startsWith('✓')) {
           return (
             <div key={idx} className="flex items-start gap-1.5 text-emerald-700 font-semibold my-0.5">
@@ -64,8 +64,8 @@ const FormattedText = ({ content }) => {
           );
         }
 
-        // Section Headers (e.g. "Reason:", "Pros:", "Cons:")
-        if (/^(Reason|Pros|Cons|Recommendations|Next steps|Shopping Advice|Price Comparison|Budget Summary):/i.test(trimmed)) {
+        // Section Headers (e.g. "Reason:", "Pros:", "Cons:", "Side-by-Side Comparison:")
+        if (/^(Reason|Pros|Cons|Recommendations|Next steps|Shopping Advice|Price Comparison|Budget Summary|Product Comparison Analysis|Side-by-Side Comparison|Recommendation):/i.test(trimmed)) {
           return (
             <div key={idx} className="font-extrabold text-[11px] uppercase tracking-wider text-emerald-800 pt-1 border-t border-gray-100/60 mt-1.5">
               {parseBold(trimmed)}
@@ -79,11 +79,13 @@ const FormattedText = ({ content }) => {
   );
 };
 
-const ChatMessage = ({ message, onFollowUpClick }) => {
+const ChatMessage = ({ message, onFollowUpClick, onSpeakMessage }) => {
   const dispatch = useDispatch();
   const navigate = useNavigate();
   const { isAuthenticated } = useSelector((state) => state.auth);
   const { products: wishlistProducts } = useSelector((state) => state.wishlist);
+
+  const [isPlayingAudio, setIsPlayingAudio] = useState(false);
 
   const isUser = message.sender === 'user';
   const timestamp = message.timestamp || new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
@@ -121,6 +123,44 @@ const ChatMessage = ({ message, onFollowUpClick }) => {
     }
   };
 
+  const handleChipClick = (chipText) => {
+    const lowerChip = chipText.toLowerCase();
+    if (lowerChip.includes('proceed to checkout') || lowerChip.includes('checkout')) {
+      navigate('/checkout');
+      return;
+    }
+    if (lowerChip.includes('show wishlist') || lowerChip === 'wishlist' || lowerChip.includes('open wishlist')) {
+      navigate('/wishlist');
+      return;
+    }
+    if (lowerChip.includes('go to cart') || lowerChip.includes('check cart') || lowerChip.includes('open cart')) {
+      navigate('/cart');
+      return;
+    }
+    if (lowerChip.includes('view order details') || lowerChip.includes('my orders') || lowerChip.includes('track my order')) {
+      navigate('/orders');
+      return;
+    }
+    if (lowerChip.includes('open budget planner') || lowerChip.includes('plan monthly budget')) {
+      navigate('/budget-assistant');
+      return;
+    }
+    if (lowerChip.includes('browse shop') || lowerChip.includes('open shop')) {
+      navigate('/products');
+      return;
+    }
+    if (onFollowUpClick) {
+      onFollowUpClick(chipText);
+    }
+  };
+
+  const handleSpeakClick = () => {
+    if (onSpeakMessage && message.text) {
+      setIsPlayingAudio(!isPlayingAudio);
+      onSpeakMessage(message.text, () => setIsPlayingAudio(false));
+    }
+  };
+
   if (isUser) {
     return (
       <div className="flex flex-col items-end w-full animate-in fade-in slide-in-from-bottom-1 duration-200">
@@ -132,7 +172,7 @@ const ChatMessage = ({ message, onFollowUpClick }) => {
     );
   }
 
-  // Assistant message formatting
+  // Assistant message bubble
   return (
     <div className="flex gap-2.5 items-start w-full animate-in fade-in slide-in-from-bottom-2 duration-300">
       {/* Bot Avatar */}
@@ -141,8 +181,20 @@ const ChatMessage = ({ message, onFollowUpClick }) => {
       </div>
 
       <div className="flex-1 space-y-2.5 max-w-[88%]">
-        {/* Main Bubble */}
-        <div className="bg-white/95 border border-emerald-950/10 rounded-2xl rounded-tl-none px-4 py-3 shadow-md text-xs text-gray-900 leading-relaxed space-y-2">
+        {/* Main Message Card */}
+        <div className="bg-white/95 border border-emerald-950/10 rounded-2xl rounded-tl-none px-4 py-3 shadow-md text-xs text-gray-900 leading-relaxed space-y-2 relative group">
+          
+          {/* TTS Audio Speak Button */}
+          {message.text && (
+            <button
+              onClick={handleSpeakClick}
+              className="absolute top-2.5 right-2.5 p-1 rounded-full text-gray-400 hover:text-emerald-600 hover:bg-emerald-50 transition-colors opacity-0 group-hover:opacity-100 focus:opacity-100"
+              title={isPlayingAudio ? "Stop Audio" : "Listen to Response"}
+            >
+              {isPlayingAudio ? <VolumeX className="w-3.5 h-3.5 text-emerald-600 animate-pulse" /> : <Volume2 className="w-3.5 h-3.5" />}
+            </button>
+          )}
+
           {message.text && <FormattedText content={message.text} />}
 
           {/* AI Insights block */}
@@ -166,16 +218,19 @@ const ChatMessage = ({ message, onFollowUpClick }) => {
           {/* Smart Interactive Follow-up Chips */}
           {message.followUps && message.followUps.length > 0 && (
             <div className="pt-2 border-t border-gray-100/80 space-y-1.5">
-              <p className="text-[10px] uppercase font-extrabold text-emerald-800 tracking-wider">Suggested Next Steps:</p>
+              <p className="text-[10px] uppercase font-extrabold text-emerald-800 tracking-wider">Suggested Next Actions:</p>
               <div className="flex flex-wrap gap-1.5">
                 {message.followUps.map((chip, idx) => (
                   <button
                     key={idx}
                     type="button"
-                    onClick={() => onFollowUpClick && onFollowUpClick(chip)}
-                    className="px-2.5 py-1 text-[11px] font-semibold bg-emerald-50 hover:bg-emerald-600 text-emerald-700 hover:text-white border border-emerald-200/60 rounded-full transition-all duration-150 shadow-sm hover:scale-105 active:scale-95"
+                    onClick={() => handleChipClick(chip)}
+                    className="px-2.5 py-1 text-[11px] font-semibold bg-emerald-50 hover:bg-emerald-600 text-emerald-700 hover:text-white border border-emerald-200/60 rounded-full transition-all duration-150 shadow-xs hover:scale-105 active:scale-95 flex items-center gap-1"
                   >
-                    {chip}
+                    <span>{chip}</span>
+                    {chip.toLowerCase().includes('checkout') || chip.toLowerCase().includes('cart') || chip.toLowerCase().includes('orders') || chip.toLowerCase().includes('shop') ? (
+                      <ArrowRight className="w-3 h-3 ml-0.5" />
+                    ) : null}
                   </button>
                 ))}
               </div>
@@ -188,10 +243,11 @@ const ChatMessage = ({ message, onFollowUpClick }) => {
           </div>
         </div>
 
-        {/* Inline Product Recommendations Cards */}
+        {/* Feature 19: Rich Product Recommendation Cards */}
         {message.products && message.products.length > 0 && (
           <div className="flex gap-2.5 overflow-x-auto pb-2 scrollbar-thin scrollbar-thumb-emerald-200 scrollbar-track-transparent -mx-1 px-1">
             {message.products.map((product) => {
+              if (!product || !product._id) return null;
               const isWishlisted = wishlistProducts.some((item) => item._id === product._id);
               const discount = product.originalPrice > product.price
                 ? Math.round(((product.originalPrice - product.price) / product.originalPrice) * 100)
@@ -200,7 +256,7 @@ const ChatMessage = ({ message, onFollowUpClick }) => {
               return (
                 <div
                   key={product._id}
-                  className="w-44 bg-white border border-emerald-900/10 rounded-2xl p-3 flex flex-col justify-between shrink-0 shadow-sm hover:shadow-md hover:border-emerald-300 transition-all relative group"
+                  className="w-48 bg-white border border-emerald-900/10 rounded-2xl p-3 flex flex-col justify-between shrink-0 shadow-sm hover:shadow-md hover:border-emerald-300 transition-all relative group"
                 >
                   {/* Discount Badge */}
                   {discount > 0 && (
@@ -212,7 +268,7 @@ const ChatMessage = ({ message, onFollowUpClick }) => {
                   {/* Wishlist Button */}
                   <button
                     onClick={() => handleWishlistToggle(product)}
-                    className="absolute top-2 right-2 p-1 rounded-full bg-white/90 shadow-sm border border-gray-100 hover:text-rose-500 text-gray-400 z-10 transition-colors"
+                    className="absolute top-2 right-2 p-1.5 rounded-full bg-white/90 shadow-sm border border-gray-100 hover:text-rose-500 text-gray-400 z-10 transition-colors"
                     title={isWishlisted ? "Remove from wishlist" : "Add to wishlist"}
                   >
                     <Heart className={`w-3.5 h-3.5 ${isWishlisted ? 'fill-rose-500 text-rose-500' : ''}`} />
@@ -221,7 +277,7 @@ const ChatMessage = ({ message, onFollowUpClick }) => {
                   {/* Product Image */}
                   <Link
                     to={`/products/${product._id}`}
-                    className="bg-gray-50/70 rounded-xl p-2 h-20 flex items-center justify-center mb-2 overflow-hidden group-hover:scale-105 transition-transform"
+                    className="bg-gray-50/70 rounded-xl p-2 h-24 flex items-center justify-center mb-2 overflow-hidden group-hover:scale-105 transition-transform"
                   >
                     <img
                       src={product.image}
@@ -231,11 +287,18 @@ const ChatMessage = ({ message, onFollowUpClick }) => {
                     />
                   </Link>
 
-                  {/* Product Details */}
+                  {/* Product Info */}
                   <div className="space-y-1">
-                    <span className="text-[8px] uppercase font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-100">
-                      {product.category}
-                    </span>
+                    <div className="flex items-center justify-between">
+                      <span className="text-[8px] uppercase font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-100">
+                        {product.category}
+                      </span>
+                      <div className="flex items-center gap-0.5 text-[9px] text-gray-400">
+                        <Star className="w-2.5 h-2.5 fill-amber-400 text-amber-400" />
+                        <span className="font-semibold text-gray-600">{product.rating}</span>
+                      </div>
+                    </div>
+
                     <Link
                       to={`/products/${product._id}`}
                       className="block font-bold text-[10px] text-gray-800 hover:text-emerald-600 line-clamp-1 leading-normal"
@@ -243,21 +306,30 @@ const ChatMessage = ({ message, onFollowUpClick }) => {
                       {product.name}
                     </Link>
 
-                    {/* Rating */}
-                    <div className="flex items-center gap-0.5 text-[9px] text-gray-400">
-                      <Star className="w-2.5 h-2.5 fill-amber-400 text-amber-400" />
-                      <span className="font-semibold text-gray-600">{product.rating}</span>
-                    </div>
-
+                    {/* Price & Actions */}
                     <div className="flex items-center justify-between pt-1.5 border-t border-gray-50 mt-1">
-                      <span className="font-extrabold text-[11px] text-gray-900">₹{product.price.toLocaleString()}</span>
-                      <button
-                        onClick={() => handleAddToCart(product)}
-                        className="w-6 h-6 rounded-full bg-emerald-50 hover:bg-emerald-600 text-emerald-600 hover:text-white flex items-center justify-center transition-all shadow-xs"
-                        title="Add to Cart"
-                      >
-                        <ShoppingCart className="w-3 h-3" />
-                      </button>
+                      <div>
+                        <span className="font-extrabold text-[11px] text-gray-900">₹{product.price.toLocaleString()}</span>
+                        {product.originalPrice > product.price && (
+                          <span className="block text-[8px] text-gray-400 line-through">₹{product.originalPrice.toLocaleString()}</span>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <Link
+                          to={`/products/${product._id}`}
+                          className="w-6 h-6 rounded-full bg-gray-100 hover:bg-gray-200 text-gray-600 flex items-center justify-center transition-colors"
+                          title="View Details"
+                        >
+                          <Eye className="w-3 h-3" />
+                        </Link>
+                        <button
+                          onClick={() => handleAddToCart(product)}
+                          className="w-6 h-6 rounded-full bg-emerald-600 hover:bg-emerald-500 text-white flex items-center justify-center transition-all shadow-xs"
+                          title="Add to Cart"
+                        >
+                          <ShoppingCart className="w-3 h-3" />
+                        </button>
+                      </div>
                     </div>
                   </div>
                 </div>

@@ -19,7 +19,22 @@ const Search = () => {
   const { isAuthenticated } = useSelector((state) => state.auth);
 
   useEffect(() => {
-    dispatch(fetchProducts({ search: query }));
+    if (query) {
+      const searchTerm = query.trim();
+      dispatch(fetchProducts({ search: searchTerm })).then((res) => {
+        // Singular term fallback for plural words (e.g. "mobiles" -> "mobile", "laptops" -> "laptop", "phones" -> "phone")
+        if (
+          (!res.payload || res.payload.length === 0) &&
+          searchTerm.length > 3 &&
+          searchTerm.toLowerCase().endsWith('s')
+        ) {
+          const singularTerm = searchTerm.slice(0, -1);
+          dispatch(fetchProducts({ search: singularTerm }));
+        }
+      });
+    } else {
+      dispatch(fetchProducts());
+    }
   }, [dispatch, query]);
 
   const handleAddToCart = (product) => {
