@@ -8,6 +8,8 @@ import { Card, CardContent } from '../components/ui/card';
 import { getFallbackImage } from '../utils/imageHelper';
 import toast from 'react-hot-toast';
 
+import { generateInvoicePDF } from '../utils/generateInvoice';
+
 import OrderTrackingModal from '../components/Orders/OrderTrackingModal';
 import InvoiceModal from '../components/Orders/InvoiceModal';
 
@@ -104,10 +106,10 @@ const OrderDetail = () => {
         <div className="flex items-center gap-3">
           {getStatusBadge(order.status)}
           <button
-            onClick={() => setIsInvoiceOpen(true)}
-            className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-all flex items-center gap-1 shadow-sm"
+            onClick={() => generateInvoicePDF(order)}
+            className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-all flex items-center gap-1 shadow-sm cursor-pointer"
           >
-            <FileText className="w-4 h-4" /> Invoice
+            <FileText className="w-4 h-4" /> Download Invoice
           </button>
         </div>
       </div>

@@ -5,7 +5,7 @@ import { fetchMyOrders, cancelOrderThunk, requestReturnThunk } from '../redux/sl
 import { addToCart } from '../redux/slices/cartSlice';
 import { 
   ShoppingBag, ChevronRight, Calendar, CreditCard, Search, Filter, 
-  ArrowUpDown, Truck, Sparkles, FileText, XCircle, RefreshCw, Eye, ShoppingCart
+  ArrowUpDown, Truck, Sparkles, FileText, XCircle, RefreshCw, Eye, ShoppingCart, QrCode
 } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { Card, CardContent } from '../components/ui/card';
@@ -15,6 +15,7 @@ import OrderTrackingModal from '../components/Orders/OrderTrackingModal';
 import InvoiceModal from '../components/Orders/InvoiceModal';
 import CancelOrderModal from '../components/Orders/CancelOrderModal';
 import ReturnOrderModal from '../components/Orders/ReturnOrderModal';
+import { generateInvoicePDF } from '../utils/generateInvoice';
 
 const Orders = () => {
   const dispatch = useDispatch();
@@ -77,9 +78,13 @@ const Orders = () => {
   const getStatusBadge = (status) => {
     switch (status) {
       case 'Pending':
-        return <span className="bg-amber-100 text-amber-800 text-[10px] font-extrabold px-2.5 py-1 rounded-full uppercase tracking-wider">Pending</span>;
+      case 'Waiting for Payment':
+        return <span className="bg-amber-100 text-amber-800 text-[10px] font-extrabold px-2.5 py-1 rounded-full uppercase tracking-wider">Waiting for Payment</span>;
+      case 'Payment Submitted':
+        return <span className="bg-amber-100 text-amber-900 text-[10px] font-extrabold px-2.5 py-1 rounded-full uppercase tracking-wider border border-amber-300">Payment Submitted</span>;
       case 'Confirmed':
-        return <span className="bg-blue-100 text-blue-800 text-[10px] font-extrabold px-2.5 py-1 rounded-full uppercase tracking-wider">Confirmed</span>;
+      case 'Admin Verified':
+        return <span className="bg-emerald-100 text-emerald-800 text-[10px] font-extrabold px-2.5 py-1 rounded-full uppercase tracking-wider">Confirmed</span>;
       case 'Packed':
         return <span className="bg-indigo-100 text-indigo-800 text-[10px] font-extrabold px-2.5 py-1 rounded-full uppercase tracking-wider">Packed</span>;
       case 'Shipped':
@@ -89,12 +94,26 @@ const Orders = () => {
       case 'Delivered':
         return <span className="bg-emerald-100 text-emerald-800 text-[10px] font-extrabold px-2.5 py-1 rounded-full uppercase tracking-wider">Delivered</span>;
       case 'Cancelled':
-        return <span className="bg-rose-100 text-rose-800 text-[10px] font-extrabold px-2.5 py-1 rounded-full uppercase tracking-wider">Cancelled</span>;
+      case 'Payment Rejected':
+        return <span className="bg-rose-100 text-rose-800 text-[10px] font-extrabold px-2.5 py-1 rounded-full uppercase tracking-wider">Payment Rejected</span>;
       case 'Returned':
         return <span className="bg-amber-100 text-amber-900 text-[10px] font-extrabold px-2.5 py-1 rounded-full uppercase tracking-wider">Returned</span>;
       default:
         return <span className="bg-gray-100 text-gray-800 text-[10px] font-extrabold px-2.5 py-1 rounded-full uppercase tracking-wider">{status}</span>;
     }
+  };
+
+  const getPaymentBadge = (order) => {
+    if (order.status === 'Refunded') {
+      return <span className="bg-purple-100 text-purple-800 text-[10px] font-extrabold px-2.5 py-1 rounded-full uppercase tracking-wider">Refunded</span>;
+    }
+    if (order.isPaid) {
+      return <span className="bg-emerald-100 text-emerald-800 text-[10px] font-extrabold px-2.5 py-1 rounded-full uppercase tracking-wider">Paid ✓</span>;
+    }
+    if (order.status === 'Payment Submitted') {
+      return <span className="bg-amber-100 text-amber-800 text-[10px] font-extrabold px-2.5 py-1 rounded-full uppercase tracking-wider">Verification Pending</span>;
+    }
+    return <span className="bg-amber-100 text-amber-800 text-[10px] font-extrabold px-2.5 py-1 rounded-full uppercase tracking-wider">Payment Pending</span>;
   };
 
   // Filter & Sort Logic
@@ -156,7 +175,7 @@ const Orders = () => {
   }
 
   return (
-    <div className="max-w-5xl mx-auto space-y-8 py-2">
+    <div className="max-w-5xl mx-auto space-y-8 py-2 font-sans">
       
       {/* Header Banner */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between bg-white p-6 rounded-3xl border border-gray-100 shadow-sm gap-4">
@@ -164,7 +183,7 @@ const Orders = () => {
           <h1 className="text-2xl font-black text-gray-900 tracking-tight flex items-center gap-2">
             📦 My Orders ({orders.length})
           </h1>
-          <p className="text-xs text-gray-400 font-semibold">Track shipments, download invoices, and manage returns.</p>
+          <p className="text-xs text-gray-400 font-semibold">Track shipments, view UPI transaction status, and download invoices.</p>
         </div>
         <div className="text-xs font-bold text-gray-500 bg-emerald-50 text-emerald-800 px-3.5 py-2 rounded-xl border border-emerald-100 shrink-0 text-center sm:text-right">
           Active Orders: <span className="font-black text-emerald-600">{orders.filter(o => o.status !== 'Delivered' && o.status !== 'Cancelled').length}</span>
@@ -209,11 +228,11 @@ const Orders = () => {
           <span className="text-[10px] font-extrabold text-gray-400 uppercase tracking-wider flex items-center gap-1 pr-2 shrink-0">
             <Filter className="w-3 h-3" /> Status:
           </span>
-          {['All', 'Confirmed', 'Packed', 'Shipped', 'Delivered', 'Cancelled', 'Returned'].map((status) => (
+          {['All', 'Payment Submitted', 'Confirmed', 'Packed', 'Shipped', 'Delivered', 'Cancelled'].map((status) => (
             <button
               key={status}
               onClick={() => setStatusFilter(status)}
-              className={`px-3 py-1.5 rounded-full text-xs font-bold transition-all shrink-0 ${
+              className={`px-3 py-1.5 rounded-full text-xs font-bold transition-all shrink-0 cursor-pointer ${
                 statusFilter === status 
                   ? 'bg-emerald-600 text-white shadow-md' 
                   : 'bg-gray-100 hover:bg-gray-200 text-gray-600'
@@ -238,7 +257,7 @@ const Orders = () => {
               : "You haven't placed any orders yet. Start shopping and explore our AI shopping recommendations!"}
           </p>
           <Link to="/products" className="inline-block">
-            <Button className="bg-emerald-600 hover:bg-emerald-700 text-white rounded-full px-8 py-3 font-semibold shadow-md flex items-center gap-2">
+            <Button className="bg-emerald-600 hover:bg-emerald-700 text-white rounded-full px-8 py-3 font-semibold shadow-md flex items-center gap-2 cursor-pointer">
               Browse Catalog <ChevronRight className="w-4 h-4" />
             </Button>
           </Link>
@@ -246,7 +265,7 @@ const Orders = () => {
       ) : (
         <div className="space-y-6">
           {processedOrders.map((order) => {
-            const isEligibleCancel = ['Pending', 'Confirmed', 'Packed'].includes(order.status);
+            const isEligibleCancel = ['Pending', 'Waiting for Payment', 'Confirmed', 'Packed'].includes(order.status);
             const isEligibleReturn = order.status === 'Delivered';
 
             return (
@@ -254,9 +273,10 @@ const Orders = () => {
                 
                 {/* Order Top Bar Info */}
                 <div className="bg-gray-50/80 px-6 py-3.5 border-b border-gray-100 flex flex-wrap items-center justify-between gap-3 text-xs">
-                  <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-2">
                     <span className="font-black text-gray-900">Order #{order._id.substring(12).toUpperCase()}</span>
                     {getStatusBadge(order.status)}
+                    {getPaymentBadge(order)}
                   </div>
                   <div className="flex items-center gap-4 text-gray-500 font-semibold text-[11px]">
                     <div className="flex items-center gap-1">
@@ -264,7 +284,7 @@ const Orders = () => {
                       <span>{new Date(order.createdAt).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })}</span>
                     </div>
                     <div className="flex items-center gap-1">
-                      <CreditCard className="w-3.5 h-3.5 text-emerald-600" />
+                      <QrCode className="w-3.5 h-3.5 text-emerald-600" />
                       <span>{order.paymentMethod}</span>
                     </div>
                   </div>
@@ -290,7 +310,7 @@ const Orders = () => {
                           </div>
                           <button
                             onClick={() => handleBuyAgain(item)}
-                            className="p-2 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-700 text-[10px] font-extrabold flex items-center gap-1 transition-colors shrink-0"
+                            className="p-2 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-700 text-[10px] font-extrabold flex items-center gap-1 transition-colors shrink-0 cursor-pointer"
                             title="Buy Again"
                           >
                             <ShoppingCart className="w-3.5 h-3.5" /> Buy Again
@@ -329,15 +349,15 @@ const Orders = () => {
                       {/* Track Order Button */}
                       <button
                         onClick={() => setActiveTrackingOrder(order)}
-                        className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl flex items-center gap-1.5 transition-all shadow-sm"
+                        className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl flex items-center gap-1.5 transition-all shadow-sm cursor-pointer"
                       >
                         <Truck className="w-3.5 h-3.5" /> Track Order
                       </button>
 
                       {/* Download Invoice Button */}
                       <button
-                        onClick={() => setActiveInvoiceOrder(order)}
-                        className="px-3.5 py-2 bg-white hover:bg-gray-50 border border-gray-200 text-gray-700 font-bold text-xs rounded-xl flex items-center gap-1.5 transition-all shadow-sm"
+                        onClick={() => generateInvoicePDF(order)}
+                        className="px-3.5 py-2 bg-white hover:bg-gray-50 border border-gray-200 text-gray-700 font-bold text-xs rounded-xl flex items-center gap-1.5 transition-all shadow-sm cursor-pointer"
                       >
                         <FileText className="w-3.5 h-3.5 text-emerald-600" /> Download Invoice
                       </button>
@@ -345,7 +365,7 @@ const Orders = () => {
                       {/* AI Order Assistant */}
                       <button
                         onClick={() => handleNeedHelp(order)}
-                        className="px-3.5 py-2 bg-purple-50 hover:bg-purple-100 border border-purple-200 text-purple-800 font-extrabold text-xs rounded-xl flex items-center gap-1.5 transition-all shadow-sm"
+                        className="px-3.5 py-2 bg-purple-50 hover:bg-purple-100 border border-purple-200 text-purple-800 font-extrabold text-xs rounded-xl flex items-center gap-1.5 transition-all shadow-sm cursor-pointer"
                       >
                         <Sparkles className="w-3.5 h-3.5 text-purple-600 animate-pulse" /> Need AI Help
                       </button>
@@ -356,7 +376,7 @@ const Orders = () => {
                       {isEligibleCancel && (
                         <button
                           onClick={() => setActiveCancelOrder(order)}
-                          className="px-3 py-2 bg-rose-50 hover:bg-rose-100 text-rose-700 font-extrabold text-xs rounded-xl flex items-center gap-1 border border-rose-200/60 transition-colors"
+                          className="px-3 py-2 bg-rose-50 hover:bg-rose-100 text-rose-700 font-extrabold text-xs rounded-xl flex items-center gap-1 border border-rose-200/60 transition-colors cursor-pointer"
                         >
                           <XCircle className="w-3.5 h-3.5" /> Cancel Order
                         </button>
@@ -366,7 +386,7 @@ const Orders = () => {
                       {isEligibleReturn && (
                         <button
                           onClick={() => setActiveReturnOrder(order)}
-                          className="px-3 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-extrabold text-xs rounded-xl flex items-center gap-1 border border-indigo-200/60 transition-colors"
+                          className="px-3 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-extrabold text-xs rounded-xl flex items-center gap-1 border border-indigo-200/60 transition-colors cursor-pointer"
                         >
                           <RefreshCw className="w-3.5 h-3.5" /> Return / Replace
                         </button>
@@ -374,7 +394,7 @@ const Orders = () => {
 
                       {/* View Details Link */}
                       <Link to={`/order/${order._id}`}>
-                        <button className="px-3.5 py-2 bg-gray-100 hover:bg-gray-200 text-gray-800 font-bold text-xs rounded-xl flex items-center gap-1 transition-colors">
+                        <button className="px-3.5 py-2 bg-gray-100 hover:bg-gray-200 text-gray-800 font-bold text-xs rounded-xl flex items-center gap-1 transition-colors cursor-pointer">
                           <Eye className="w-3.5 h-3.5" /> View Details
                         </button>
                       </Link>

@@ -36,8 +36,10 @@ const AdminUsers = lazy(() => import('./pages/admin/Users'));
 const AdminCustomerQueries = lazy(() => import('./pages/admin/CustomerQueries'));
 const AdminSmartCoupons = lazy(() => import('./pages/admin/SmartCoupons'));
 const AdminExportReports = lazy(() => import('./pages/admin/ExportReports'));
+const OrderSuccess = lazy(() => import('./pages/OrderSuccess'));
 const AdminSettings = lazy(() => import('./pages/admin/AdminSettings'));
 const AdminProfile = lazy(() => import('./pages/admin/AdminProfile'));
+const AdminPayments = lazy(() => import('./pages/admin/PaymentManagement'));
 
 // Layouts
 const MainLayout = lazy(() => import('./layouts/MainLayout'));
@@ -83,6 +85,7 @@ function App() {
             <Route path="cart" element={<Cart />} />
             <Route path="wishlist" element={<Wishlist />} />
             <Route path="checkout" element={<Checkout />} />
+            <Route path="order-success/:orderId" element={<OrderSuccess />} />
             <Route path="orders" element={<Orders />} />
             <Route path="order/:id" element={<OrderDetail />} />
             <Route path="profile" element={<Profile />} />
@@ -105,6 +108,7 @@ function App() {
         >
           <Route index element={<AdminDashboard />} />
           <Route path="orders" element={<AdminOrders />} />
+          <Route path="payments" element={<AdminPayments />} />
           <Route path="products" element={<AdminProducts />} />
           <Route path="categories" element={<AdminCategories />} />
           <Route path="inventory" element={<AdminInventory />} />

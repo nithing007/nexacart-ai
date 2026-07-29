@@ -6,11 +6,7 @@ import {
   LayoutDashboard, 
   ShoppingBag, 
   Package, 
-  Tags, 
-  Boxes, 
-  PackageX, 
   Users, 
-  MessageSquare, 
   TicketPercent, 
   BarChart3, 
   Settings, 
@@ -46,10 +42,6 @@ const AdminSidebar = () => {
     navigate('/login', { replace: true });
   };
 
-  const isActive = (path) => {
-    if (path === '/admin') return location.pathname === '/admin';
-    return location.pathname.startsWith(path);
-  };
 
   return (
     <>
@@ -124,8 +116,19 @@ const AdminSidebar = () => {
                 >
                   Returns & Refunds
                 </Link>
+                <Link
+                  to="/admin/payments"
+                  className={`block px-3 py-2 rounded-lg text-[11px] transition-colors ${
+                    location.pathname === '/admin/payments'
+                      ? 'bg-emerald-500/20 text-emerald-300 font-bold border border-emerald-500/30'
+                      : 'hover:text-white text-slate-400'
+                  }`}
+                >
+                  Razorpay Payments
+                </Link>
               </div>
             )}
+
           </div>
 
           {/* Products Collapsible Group */}

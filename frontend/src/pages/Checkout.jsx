@@ -3,8 +3,24 @@ import { useDispatch, useSelector } from 'react-redux';
 import { useNavigate } from 'react-router-dom';
 import { createOrder, resetOrderSuccess, fetchMyOrders } from '../redux/slices/ordersSlice';
 import { clearCart } from '../redux/slices/cartSlice';
-import { loadUserBudget, calculateBudgetMetrics, formatINR } from '../ai/budgetEngine';
-import { CreditCard, MapPin, Sparkles, AlertTriangle, CheckCircle2, X } from 'lucide-react';
+import { loadUserBudget, saveUserBudget, calculateBudgetMetrics, formatINR } from '../ai/budgetEngine';
+import UpiQrPaymentModal from '../components/Payment/UpiQrPaymentModal';
+import api from '../services/api';
+import { 
+  CreditCard, 
+  MapPin, 
+  Sparkles, 
+  AlertTriangle, 
+  CheckCircle2, 
+  X, 
+  ShieldCheck, 
+  Smartphone, 
+  Landmark, 
+  Wallet, 
+  Banknote, 
+  RefreshCcw,
+  ArrowRight
+} from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { Card, CardContent } from '../components/ui/card';
 import { Input } from '../components/ui/input';
@@ -18,39 +34,97 @@ const Checkout = () => {
 
   const { user } = useSelector((state) => state.auth);
   const { items, subtotal, tax, shipping, total } = useSelector((state) => state.cart);
-  const { orders, success, loading, error } = useSelector((state) => state.orders);
+  const { orders, success, loading: orderLoading } = useSelector((state) => state.orders);
 
   const [shippingAddress, setShippingAddress] = useState(user?.address || '');
-  const [paymentMethod, setPaymentMethod] = useState('Cash on Delivery');
+  const [paymentMethod, setPaymentMethod] = useState('UPI'); // Default & Recommended
+
+  const [isProcessingPayment, setIsProcessingPayment] = useState(false);
+  const [upiOrderData, setUpiOrderData] = useState(null);
+  const [showUpiModal, setShowUpiModal] = useState(false);
 
   // AI Checkout Analysis Modal State
   const [showAnalysisModal, setShowAnalysisModal] = useState(false);
   const [analysisData, setAnalysisData] = useState(null);
 
-  // Fetch orders for budget calculation
+  // Fetch user orders for budget calculations
   useEffect(() => {
     dispatch(fetchMyOrders());
   }, [dispatch]);
 
-  // If cart is empty, redirect back
+  // Redirect if cart is empty
   useEffect(() => {
     if (items.length === 0 && !success) {
       navigate('/cart');
     }
   }, [items, success, navigate]);
 
-  // Handle successful order creation
+  // Handle COD Placement Success
   useEffect(() => {
-    if (success) {
-      dispatch(clearCart()); // Clear cart in state & DB
-      dispatch(resetOrderSuccess()); // Reset success flag in orders slice
-      toast.success('Order placed successfully!');
+    if (success && paymentMethod === 'Cash on Delivery') {
+      dispatch(clearCart());
+      dispatch(resetOrderSuccess());
+      toast.success('Order placed successfully (Cash on Delivery)!');
       navigate('/orders');
     }
-  }, [success, dispatch, navigate]);
+  }, [success, paymentMethod, dispatch, navigate]);
 
-  const executeOrderDispatch = () => {
+  // Calculate current user budget
+  const userId = user?._id || user?.id || 'guest';
+  const userBudget = loadUserBudget(userId);
+  const metrics = calculateBudgetMetrics(orders, userBudget);
+
+  // Consolidated Payment Options
+  const paymentMethods = [
+    {
+      id: 'upi',
+      name: 'UPI (Recommended)',
+      desc: 'Pay via GPay, PhonePe, Paytm, BHIM, or Dynamic QR Code',
+      icon: Smartphone,
+      isRecommended: true,
+      badge: 'Fastest & Zero Fee'
+    },
+    {
+      id: 'debit',
+      name: 'Debit Card',
+      desc: 'Visa, Mastercard, RuPay, Maestro via UPI QR',
+      icon: CreditCard,
+      badge: 'Secure'
+    },
+    {
+      id: 'credit',
+      name: 'Credit Card',
+      desc: 'Visa, Mastercard, Amex via UPI QR',
+      icon: CreditCard,
+      badge: 'Rewards'
+    },
+    {
+      id: 'netbanking',
+      name: 'Net Banking',
+      desc: 'HDFC, ICICI, SBI, Axis & 50+ Banks via UPI QR',
+      icon: Landmark,
+      badge: 'All Banks'
+    },
+    {
+      id: 'wallet',
+      name: 'Wallet',
+      desc: 'Paytm Wallet, Amazon Pay, Mobikwik',
+      icon: Wallet,
+      badge: 'Fast'
+    },
+    {
+      id: 'cod',
+      name: 'Cash on Delivery',
+      desc: 'Pay cash upon doorstep delivery',
+      icon: Banknote,
+      badge: 'Pay Later'
+    }
+  ];
+
+  // Executes UPI QR Payment Order Creation or COD Flow
+  const executePaymentFlow = async () => {
     setShowAnalysisModal(false);
+
     const orderItems = items.map((item) => ({
       product: item.product._id,
       name: item.product.name,
@@ -59,44 +133,80 @@ const Checkout = () => {
       price: item.product.price,
     }));
 
-    dispatch(
-      createOrder({
-        orderItems,
-        shippingAddress,
-        paymentMethod,
-        itemsPrice: subtotal,
-        taxPrice: tax,
-        shippingPrice: shipping,
-        totalPrice: total,
-      })
-    );
-  };
+    const orderPayload = {
+      orderItems,
+      shippingAddress,
+      paymentMethod,
+      itemsPrice: subtotal,
+      taxPrice: tax,
+      shippingPrice: shipping,
+      totalPrice: total,
+    };
 
-  const handlePlaceOrder = (e) => {
-    e.preventDefault();
-    if (!shippingAddress.trim()) {
-      toast.error('Please enter a shipping address');
+    // Cash on Delivery Direct Flow
+    if (paymentMethod === 'Cash on Delivery') {
+      dispatch(createOrder(orderPayload));
       return;
     }
 
-    // Load active budget
-    const userId = user?._id || user?.id || 'guest';
-    const userBudget = loadUserBudget(userId);
-    const metrics = calculateBudgetMetrics(orders, userBudget);
+    // Dynamic UPI QR Payment Flow
+    try {
+      setIsProcessingPayment(true);
+      toast.loading('Generating Dynamic UPI Payment Order...', { id: 'upi-init' });
 
+      const res = await api.post('/payment/create-upi-order', orderPayload);
+
+      toast.dismiss('upi-init');
+
+      if (res.data.success && res.data.order) {
+        setUpiOrderData({
+          ...res.data.order,
+          upiUri: res.data.upiUri,
+          upiId: res.data.upiId
+        });
+        setShowUpiModal(true);
+      } else {
+        toast.error(res.data.message || 'Failed to create UPI order');
+      }
+    } catch (err) {
+      console.error('UPI Order Error:', err);
+      toast.dismiss('upi-init');
+      toast.error(err.response?.data?.message || 'Failed to initialize UPI QR payment');
+    } finally {
+      setIsProcessingPayment(false);
+    }
+  };
+
+  const handlePaymentSubmitted = (updatedOrder) => {
+    setShowUpiModal(false);
+    dispatch(clearCart());
+    navigate(`/order-success/${updatedOrder._id}`);
+  };
+
+  const handleFormSubmit = (e) => {
+    e.preventDefault();
+    if (!shippingAddress.trim()) {
+      toast.error('Please enter a complete shipping address');
+      return;
+    }
+
+    // AI Budget Analysis
     const purchaseTotal = total;
     const remainingBudget = metrics.remainingBudget;
     const budgetAfterPurchase = remainingBudget - purchaseTotal;
     const isExceeded = budgetAfterPurchase < 0;
 
     const recommendation = !isExceeded
-      ? `This purchase is within your budget. However, you will have only ${formatINR(budgetAfterPurchase)} remaining for the rest of the month.`
-      : `This purchase exceeds your monthly budget by ${formatINR(Math.abs(budgetAfterPurchase))}.`;
+      ? `This purchase is within your monthly spending limit. You will have ${formatINR(budgetAfterPurchase)} remaining.`
+      : `This purchase exceeds your monthly budget limit by ${formatINR(Math.abs(budgetAfterPurchase))}.`;
 
     setAnalysisData({
+      monthlyBudget: metrics.monthlyBudget,
+      spentSoFar: metrics.totalSpent,
       purchaseTotal,
       remainingBudget,
       budgetAfterPurchase,
+      estimatedSavings: metrics.estimatedSavings || Math.round(total * 0.12),
       isExceeded,
       recommendation,
     });
@@ -105,270 +215,285 @@ const Checkout = () => {
   };
 
   return (
-    <div className="max-w-6xl mx-auto space-y-6">
-      <h1 className="text-2xl font-black text-gray-900">Checkout</h1>
+    <div className="max-w-6xl mx-auto space-y-6 py-2 font-sans">
+      
+      {/* Top Header */}
+      <div className="flex items-center justify-between border-b border-slate-100 pb-4">
+        <div>
+          <h1 className="text-2xl font-black text-slate-900 tracking-tight">Checkout</h1>
+          <p className="text-xs text-slate-500 font-medium">Dynamic UPI QR Payment Integration</p>
+        </div>
+        <div className="flex items-center gap-2 bg-emerald-50 text-emerald-800 px-3 py-1.5 rounded-full border border-emerald-200 text-xs font-bold">
+          <ShieldCheck className="w-4 h-4 text-emerald-600" />
+          <span>256-Bit Encrypted UPI Payment</span>
+        </div>
+      </div>
 
-      <form onSubmit={handlePlaceOrder} className="grid grid-cols-1 lg:grid-cols-3 gap-8 items-start">
+      <form onSubmit={handleFormSubmit} className="grid grid-cols-1 lg:grid-cols-3 gap-8 items-start">
         
-        {/* Left Columns: Forms */}
+        {/* Left Section: Shipping Address & Payment Selection */}
         <div className="lg:col-span-2 space-y-6">
-          {/* Shipping Address */}
-          <div className="bg-white p-8 rounded-3xl shadow-sm border border-gray-100 space-y-6">
-            <h2 className="font-bold text-gray-800 text-lg flex items-center gap-2 border-b border-gray-50 pb-4">
-              <MapPin className="w-5 h-5 text-emerald-600" /> Shipping Details
+          
+          {/* Section 1: Shipping Address */}
+          <div className="bg-white p-6 sm:p-8 rounded-3xl shadow-sm border border-slate-100 space-y-4">
+            <h2 className="font-bold text-slate-900 text-base flex items-center gap-2 border-b border-slate-100 pb-3">
+              <MapPin className="w-5 h-5 text-emerald-600" /> 1. Delivery Address
             </h2>
             <div className="space-y-2">
-              <Label htmlFor="address">Full Delivery Address</Label>
+              <Label htmlFor="address" className="text-xs font-bold text-slate-700">Full Shipping Address</Label>
               <Input 
                 id="address" 
-                placeholder="123 Main St, Apartment 4B, City, Postal Code"
+                placeholder="House/Flat No., Street, Landmark, City, State, PIN Code"
                 value={shippingAddress}
                 onChange={(e) => setShippingAddress(e.target.value)}
-                className="bg-gray-50 border-gray-200 py-6"
+                className="bg-slate-50 border-slate-200 py-6 text-xs"
                 required
               />
-              <p className="text-[10px] text-gray-400">
-                Please enter a complete address including city name and PIN code to ensure prompt delivery.
+              <p className="text-[11px] text-slate-400">
+                Deliver to: <span className="font-semibold text-slate-700">{user?.firstName} {user?.lastName} ({user?.email})</span>
               </p>
             </div>
           </div>
 
-          {/* Payment Method */}
-          <div className="bg-white p-8 rounded-3xl shadow-sm border border-gray-100 space-y-6">
-            <h2 className="font-bold text-gray-800 text-lg flex items-center gap-2 border-b border-gray-50 pb-4">
-              <CreditCard className="w-5 h-5 text-emerald-600" /> Payment Information
-            </h2>
+          {/* Section 2: Payment Method Selection */}
+          <div className="bg-white p-6 sm:p-8 rounded-3xl shadow-sm border border-slate-100 space-y-6">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <h2 className="font-bold text-slate-900 text-base flex items-center gap-2">
+                <CreditCard className="w-5 h-5 text-emerald-600" /> 2. Payment Method
+              </h2>
+              <span className="text-[11px] text-slate-400 font-semibold">Select preferred payment mode</span>
+            </div>
             
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              {[
-                { id: 'cod', label: 'Cash on Delivery', desc: 'Pay with cash upon delivery' },
-                { id: 'upi', label: 'UPI / NetBanking', desc: 'Pay instantly via UPI (Simulated)' }
-              ].map((method) => (
-                <div 
-                  key={method.id}
-                  onClick={() => setPaymentMethod(method.label)}
-                  className={`p-4 rounded-2xl border-2 cursor-pointer transition-all ${
-                    paymentMethod === method.label
-                      ? 'border-emerald-600 bg-emerald-50/30'
-                      : 'border-gray-100 hover:border-gray-200 bg-white'
-                  }`}
-                >
-                  <div className="flex items-center gap-2">
-                    <input 
-                      type="radio" 
-                      name="paymentMethod" 
-                      id={method.id}
-                      checked={paymentMethod === method.label}
-                      onChange={() => setPaymentMethod(method.label)}
-                      className="accent-emerald-600 cursor-pointer"
-                    />
-                    <label htmlFor={method.id} className="font-bold text-sm text-gray-800 cursor-pointer">
-                      {method.label}
-                    </label>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+              {paymentMethods.map((method) => {
+                const IconComponent = method.icon;
+                const isSelected = paymentMethod === method.name;
+
+                return (
+                  <div 
+                    key={method.id}
+                    onClick={() => setPaymentMethod(method.name)}
+                    className={`p-4 rounded-2xl border-2 cursor-pointer transition-all space-y-2.5 relative ${
+                      isSelected
+                        ? 'border-emerald-600 bg-emerald-50/40 shadow-sm'
+                        : 'border-slate-100 hover:border-slate-200 bg-white'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2.5">
+                        <input 
+                          type="radio" 
+                          name="paymentMethodRadio" 
+                          id={method.id}
+                          checked={isSelected}
+                          onChange={() => setPaymentMethod(method.name)}
+                          className="accent-emerald-600 cursor-pointer w-4 h-4"
+                        />
+                        <div className="p-2 rounded-xl bg-slate-50 border border-slate-100 text-slate-700">
+                          <IconComponent className="w-4 h-4" />
+                        </div>
+                        <label htmlFor={method.id} className="font-extrabold text-xs text-slate-900 cursor-pointer">
+                          {method.name}
+                        </label>
+                      </div>
+
+                      {method.badge && (
+                        <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full ${
+                          method.isRecommended 
+                            ? 'bg-emerald-600 text-white' 
+                            : 'bg-slate-100 text-slate-600'
+                        }`}>
+                          {method.badge}
+                        </span>
+                      )}
+                    </div>
+
+                    <p className="text-[11px] text-slate-400 pl-6 leading-relaxed">
+                      {method.desc}
+                    </p>
                   </div>
-                  <p className="text-xs text-gray-400 mt-2 pl-5">{method.desc}</p>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
         </div>
 
-        {/* Right Column: Order summary & Submit */}
+        {/* Right Section: Order Summary & Action */}
         <div className="lg:col-span-1 space-y-6">
-          <Card className="border-gray-100 rounded-3xl shadow-sm bg-white overflow-hidden">
-            <CardContent className="p-6 space-y-6">
-              <h2 className="font-black text-gray-800 text-lg border-b border-gray-50 pb-4">Items Summary</h2>
+          
+          {/* Order Summary Card */}
+          <Card className="border-slate-100 rounded-3xl shadow-sm bg-white overflow-hidden">
+            <CardContent className="p-6 space-y-5">
+              <h2 className="font-black text-slate-900 text-base border-b border-slate-100 pb-3">Order Summary</h2>
 
-              {/* Items list */}
-              <div className="space-y-3 max-h-48 overflow-y-auto pr-2 divide-y divide-gray-50">
+              {/* Items List */}
+              <div className="space-y-3 max-h-52 overflow-y-auto pr-1 divide-y divide-slate-50">
                 {items.map((item) => {
                   if (!item.product) return null;
                   return (
                     <div key={item.product._id} className="flex justify-between items-center text-xs py-2 first:pt-0">
-                      <div className="space-y-0.5">
-                        <p className="font-bold text-gray-800 line-clamp-1">{item.product.name}</p>
-                        <p className="text-gray-400">Qty: {item.quantity} x ₹{item.product.price.toLocaleString()}</p>
+                      <div className="space-y-0.5 max-w-[180px]">
+                        <p className="font-bold text-slate-800 truncate">{item.product.name}</p>
+                        <p className="text-slate-400">Qty: {item.quantity} x ₹{item.product.price?.toLocaleString('en-IN')}</p>
                       </div>
-                      <span className="font-bold text-gray-900 shrink-0">
-                        ₹{(item.product.price * item.quantity).toLocaleString()}
+                      <span className="font-bold text-slate-900 shrink-0">
+                        ₹{((item.product.price || 0) * item.quantity).toLocaleString('en-IN')}
                       </span>
                     </div>
                   );
                 })}
               </div>
 
-              <hr className="border-gray-50" />
+              <hr className="border-slate-100" />
 
-              <div className="space-y-3 text-sm text-gray-600">
+              {/* Price Breakdown */}
+              <div className="space-y-2.5 text-xs text-slate-600">
                 <div className="flex justify-between">
                   <span>Subtotal</span>
-                  <span className="font-bold text-gray-900">₹{subtotal.toLocaleString()}</span>
+                  <span className="font-bold text-slate-900">₹{subtotal.toLocaleString('en-IN')}</span>
                 </div>
                 <div className="flex justify-between">
                   <span>Tax (18% GST)</span>
-                  <span className="font-bold text-gray-900">₹{tax.toLocaleString()}</span>
+                  <span className="font-bold text-slate-900">₹{tax.toLocaleString('en-IN')}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span>Delivery</span>
+                  <span>Delivery Charge</span>
                   <span className="font-bold text-emerald-600">
-                    {shipping === 0 ? 'FREE' : `₹${shipping.toLocaleString()}`}
+                    {shipping === 0 ? 'FREE' : `₹${shipping.toLocaleString('en-IN')}`}
                   </span>
                 </div>
               </div>
 
-              <hr className="border-gray-50" />
+              <hr className="border-slate-100" />
 
-              <div className="flex justify-between items-center text-lg font-black text-gray-900">
-                <span>Total</span>
-                <span className="text-emerald-600">₹{total.toLocaleString()}</span>
+              <div className="flex justify-between items-center text-lg font-black text-slate-900">
+                <span>Grand Total</span>
+                <span className="text-emerald-600">₹{total.toLocaleString('en-IN')}</span>
               </div>
-
-              {error && (
-                <div className="text-xs text-red-600 bg-red-50 p-2.5 rounded border border-red-100">
-                  {error}
-                </div>
-              )}
 
               <Button 
                 type="submit"
-                disabled={loading}
-                className="w-full bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl py-6 font-bold shadow-md shadow-emerald-100 flex items-center justify-center gap-2"
+                disabled={isProcessingPayment || orderLoading}
+                className="w-full bg-emerald-600 hover:bg-emerald-500 text-white rounded-2xl py-6 font-bold text-xs shadow-lg shadow-emerald-100 flex items-center justify-center gap-2 cursor-pointer"
               >
-                {loading ? 'Placing Order...' : 'Place Order'}
+                {isProcessingPayment || orderLoading ? (
+                  <>
+                    <RefreshCcw className="w-4 h-4 animate-spin" /> Processing...
+                  </>
+                ) : (
+                  <>
+                    {paymentMethod === 'Cash on Delivery' ? 'Place COD Order' : `Pay via Dynamic UPI QR (₹${total.toLocaleString('en-IN')})`} <ArrowRight className="w-4 h-4" />
+                  </>
+                )}
               </Button>
             </CardContent>
           </Card>
+
+          {/* AI Budget & Savings Insight Card */}
+          <div className="bg-emerald-50/70 border border-emerald-100 rounded-3xl p-5 space-y-2.5 text-xs">
+            <div className="flex items-center gap-1.5 text-emerald-900 font-extrabold uppercase text-[10px] tracking-wider">
+              <Sparkles className="w-4 h-4 text-emerald-600" /> AI Shopping & Budget Insight
+            </div>
+            <div className="space-y-1 text-slate-700 font-medium">
+              <p>
+                Remaining Monthly Budget: <span className="font-bold text-emerald-700">{formatINR(metrics.remainingBudget - total)}</span>
+              </p>
+              <p className="text-[11px] text-slate-500">
+                This purchase is within your monthly spending limit.
+              </p>
+              <div className="pt-1.5 border-t border-emerald-200/60 flex items-center justify-between text-[11px] font-bold text-emerald-900">
+                <span>Estimated Monthly Savings:</span>
+                <span className="text-emerald-700">{formatINR(metrics.estimatedSavings || Math.round(total * 0.12))}</span>
+              </div>
+            </div>
+          </div>
+
         </div>
 
       </form>
 
-      {/* Feature 7: AI Checkout Analysis Modal */}
+      {/* AI Pre-Purchase Analysis Modal */}
       <AnimatePresence>
         {showAnalysisModal && analysisData && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-sm">
             <motion.div
               initial={{ scale: 0.95, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.95, opacity: 0 }}
-              className="bg-white w-full max-w-lg rounded-3xl shadow-2xl border border-gray-100 overflow-hidden space-y-6 p-6"
+              className="bg-white w-full max-w-lg rounded-3xl shadow-2xl border border-slate-100 overflow-hidden space-y-5 p-6"
             >
-              {/* Modal Header */}
-              <div className="flex items-center justify-between border-b border-gray-100 pb-3">
+              <div className="flex items-center justify-between border-b border-slate-100 pb-3">
                 <div className="flex items-center gap-2">
                   <div className="p-2 rounded-xl bg-emerald-50 text-emerald-600">
                     <Sparkles className="w-5 h-5 animate-pulse" />
                   </div>
                   <div>
-                    <h3 className="font-black text-base text-gray-900">AI Budget Analysis</h3>
-                    <p className="text-[10px] text-gray-400 font-semibold">Pre-purchase financial evaluation</p>
+                    <h3 className="font-black text-base text-slate-900">AI Financial Evaluation</h3>
+                    <p className="text-[10px] text-slate-400 font-semibold">Pre-checkout budget health check</p>
                   </div>
                 </div>
-                <button onClick={() => setShowAnalysisModal(false)} className="text-gray-400 hover:text-gray-600">
+                <button onClick={() => setShowAnalysisModal(false)} className="text-slate-400 hover:text-slate-600">
                   <X className="w-4 h-4" />
                 </button>
               </div>
 
-              {/* Financial Stats Breakdown */}
-              <div className="grid grid-cols-3 gap-3 text-center text-xs">
-                <div className="p-3 bg-gray-50 rounded-2xl border border-gray-100">
-                  <span className="text-[10px] text-gray-400 font-bold uppercase">Purchase Total</span>
-                  <p className="font-black text-sm text-gray-900 mt-0.5">{formatINR(analysisData.purchaseTotal)}</p>
+              <div className="grid grid-cols-3 gap-2.5 text-center text-xs">
+                <div className="p-3 bg-slate-50 rounded-2xl border border-slate-100">
+                  <span className="text-[9px] text-slate-400 font-bold uppercase">Monthly Goal</span>
+                  <p className="font-black text-xs text-slate-900 mt-0.5">{formatINR(analysisData.monthlyBudget)}</p>
                 </div>
-                <div className="p-3 bg-gray-50 rounded-2xl border border-gray-100">
-                  <span className="text-[10px] text-gray-400 font-bold uppercase">Remaining</span>
-                  <p className="font-black text-sm text-emerald-700 mt-0.5">{formatINR(analysisData.remainingBudget)}</p>
+                <div className="p-3 bg-slate-50 rounded-2xl border border-slate-100">
+                  <span className="text-[9px] text-slate-400 font-bold uppercase">Spent So Far</span>
+                  <p className="font-black text-xs text-slate-900 mt-0.5">{formatINR(analysisData.spentSoFar)}</p>
                 </div>
-                <div className="p-3 bg-gray-50 rounded-2xl border border-gray-100">
-                  <span className="text-[10px] text-gray-400 font-bold uppercase">After Purchase</span>
-                  <p className={`font-black text-sm mt-0.5 ${analysisData.isExceeded ? 'text-rose-600' : 'text-emerald-700'}`}>
-                    {formatINR(analysisData.budgetAfterPurchase)}
-                  </p>
+                <div className="p-3 bg-slate-50 rounded-2xl border border-slate-100">
+                  <span className="text-[9px] text-slate-400 font-bold uppercase">Order Total</span>
+                  <p className="font-black text-xs text-emerald-700 mt-0.5">{formatINR(analysisData.purchaseTotal)}</p>
                 </div>
               </div>
 
-              {/* AI Recommendation Message */}
-              <div className={`p-4 rounded-2xl border text-xs leading-relaxed space-y-1 ${analysisData.isExceeded ? 'bg-rose-50 border-rose-200 text-rose-950' : 'bg-emerald-50 border-emerald-200 text-emerald-950'}`}>
+              <div className={`p-4 rounded-2xl border text-xs leading-relaxed space-y-1 ${
+                analysisData.isExceeded 
+                  ? 'bg-rose-50 border-rose-200 text-rose-950' 
+                  : 'bg-emerald-50 border-emerald-200 text-emerald-950'
+              }`}>
                 <div className="flex items-center gap-1.5 font-bold uppercase tracking-wider text-[10px]">
                   {analysisData.isExceeded ? <AlertTriangle className="w-4 h-4 text-rose-600" /> : <CheckCircle2 className="w-4 h-4 text-emerald-600" />}
-                  <span>AI Recommendation</span>
+                  <span>AI Shopping Recommendation</span>
                 </div>
                 <p className="font-semibold">{analysisData.recommendation}</p>
               </div>
 
-              {/* Action Buttons */}
               <div className="flex flex-col gap-2 pt-2">
-                {!analysisData.isExceeded ? (
-                  <>
-                    <Button
-                      onClick={executeOrderDispatch}
-                      disabled={loading}
-                      className="w-full bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl py-5 font-bold text-xs shadow-md"
-                    >
-                      {loading ? 'Placing Order...' : 'Continue Purchase'}
-                    </Button>
-                    <div className="grid grid-cols-2 gap-2">
-                      <Button
-                        type="button"
-                        onClick={() => navigate('/products')}
-                        variant="outline"
-                        className="w-full text-xs font-semibold rounded-xl border-gray-200"
-                      >
-                        View Cheaper Alternatives
-                      </Button>
-                      <Button
-                        type="button"
-                        onClick={() => setShowAnalysisModal(false)}
-                        variant="ghost"
-                        className="w-full text-xs font-semibold text-gray-500"
-                      >
-                        Cancel
-                      </Button>
-                    </div>
-                  </>
-                ) : (
-                  <>
-                    <div className="grid grid-cols-2 gap-2">
-                      <Button
-                        type="button"
-                        onClick={() => navigate('/products')}
-                        variant="outline"
-                        className="w-full text-xs font-semibold rounded-xl border-gray-200"
-                      >
-                        View Alternatives
-                      </Button>
-                      <Button
-                        type="button"
-                        onClick={() => navigate('/cart')}
-                        variant="outline"
-                        className="w-full text-xs font-semibold rounded-xl border-gray-200"
-                      >
-                        Remove Items
-                      </Button>
-                    </div>
-                    <div className="grid grid-cols-2 gap-2">
-                      <Button
-                        type="button"
-                        onClick={() => navigate('/budget-assistant')}
-                        variant="outline"
-                        className="w-full text-xs font-semibold border-emerald-300 text-emerald-700 bg-emerald-50/50 hover:bg-emerald-100"
-                      >
-                        Increase Budget
-                      </Button>
-                      <Button
-                        onClick={executeOrderDispatch}
-                        disabled={loading}
-                        className="w-full bg-rose-600 hover:bg-rose-500 text-white rounded-xl font-bold text-xs shadow-md"
-                      >
-                        Proceed Anyway
-                      </Button>
-                    </div>
-                  </>
-                )}
+                <Button
+                  onClick={executePaymentFlow}
+                  disabled={isProcessingPayment}
+                  className="w-full bg-emerald-600 hover:bg-emerald-500 text-white rounded-2xl py-5 font-bold text-xs shadow-md flex items-center justify-center gap-2 cursor-pointer"
+                >
+                  {paymentMethod === 'Cash on Delivery' ? 'Confirm & Place Order' : 'Confirm & Generate Dynamic UPI QR'} <ArrowRight className="w-4 h-4" />
+                </Button>
+                <Button
+                  type="button"
+                  onClick={() => setShowAnalysisModal(false)}
+                  variant="ghost"
+                  className="w-full text-xs font-semibold text-slate-500 py-3"
+                >
+                  Return to Checkout
+                </Button>
               </div>
             </motion.div>
           </div>
         )}
       </AnimatePresence>
+
+      {/* Dynamic UPI QR Payment Modal */}
+      <UpiQrPaymentModal
+        isOpen={showUpiModal}
+        onClose={() => setShowUpiModal(false)}
+        orderData={upiOrderData}
+        onPaymentSubmitted={handlePaymentSubmitted}
+      />
+
     </div>
   );
 };

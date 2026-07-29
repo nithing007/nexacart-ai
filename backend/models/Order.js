@@ -12,13 +12,19 @@ const orderSchema = new mongoose.Schema({
     }
   ],
   shippingAddress: { type: String, required: true },
-  paymentMethod: { type: String, required: true, default: 'Cash on Delivery' },
+  paymentMethod: { type: String, required: true, default: 'UPI' },
   paymentResult: {
     id: { type: String },
     status: { type: String },
     update_time: { type: String },
     email_address: { type: String }
   },
+  upiUri: { type: String, default: '' },
+  upiTransactionRef: { type: String, default: '' }, // UTR / Txn Ref Number
+  paymentScreenshot: { type: String, default: '' },
+  paymentSubmittedAt: { type: Date },
+  paymentVerifiedAt: { type: Date },
+  adminNotes: { type: String, default: '' },
   itemsPrice: { type: Number, required: true, default: 0.0 },
   taxPrice: { type: Number, required: true, default: 0.0 },
   shippingPrice: { type: Number, required: true, default: 0.0 },
@@ -30,7 +36,24 @@ const orderSchema = new mongoose.Schema({
   status: { 
     type: String, 
     required: true, 
-    enum: ['Pending', 'Confirmed', 'Packed', 'Ready for Shipment', 'Shipped', 'In Transit', 'Out for Delivery', 'Delivered', 'Cancelled', 'Returned', 'Refunded'], 
+    enum: [
+      'Pending', 
+      'Waiting for Payment', 
+      'Payment Submitted', 
+      'Admin Verified', 
+      'Confirmed', 
+      'Processing', 
+      'Packed', 
+      'Ready for Shipment', 
+      'Shipped', 
+      'In Transit', 
+      'Out for Delivery', 
+      'Delivered', 
+      'Cancelled', 
+      'Returned', 
+      'Refunded', 
+      'Payment Rejected'
+    ], 
     default: 'Pending' 
   },
   deliveryPartner: { type: String, default: 'Delhivery' },
