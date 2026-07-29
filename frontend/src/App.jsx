@@ -1,12 +1,13 @@
-import { Routes, Route } from 'react-router-dom';
+import { Routes, Route, Navigate } from 'react-router-dom';
 import { Suspense, lazy, useEffect } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { fetchUserProfile } from './redux/slices/authSlice';
 import { fetchCart } from './redux/slices/cartSlice';
 import { fetchWishlist } from './redux/slices/wishlistSlice';
 import ProtectedRoute from './components/ProtectedRoute';
+import AdminErrorBoundary from './components/AdminErrorBoundary';
 
-// Lazy load pages for performance
+// Lazy load Customer pages
 const Home = lazy(() => import('./pages/Home'));
 const Login = lazy(() => import('./pages/Login'));
 const Register = lazy(() => import('./pages/Register'));
@@ -23,19 +24,20 @@ const Profile = lazy(() => import('./pages/Profile'));
 const BudgetAssistant = lazy(() => import('./pages/BudgetAssistant'));
 const AiRecommendations = lazy(() => import('./pages/AiRecommendations'));
 const UserDashboard = lazy(() => import('./pages/user/Dashboard'));
+
+// Lazy load Operational Admin pages
 const AdminDashboard = lazy(() => import('./pages/admin/Dashboard'));
-const AdminProfile = lazy(() => import('./pages/admin/AdminProfile'));
-const AdminSettings = lazy(() => import('./pages/admin/AdminSettings'));
-const AdminAIAnalytics = lazy(() => import('./pages/admin/AIAnalytics'));
+const AdminOrders = lazy(() => import('./pages/admin/Orders'));
+const AdminProducts = lazy(() => import('./pages/admin/Products'));
+const AdminCategories = lazy(() => import('./pages/admin/Categories'));
+const AdminInventory = lazy(() => import('./pages/admin/Inventory'));
 const AdminMissingRequests = lazy(() => import('./pages/admin/MissingRequests'));
-const AdminAILogs = lazy(() => import('./pages/admin/AIConversationLogs'));
-const AdminProductInsights = lazy(() => import('./pages/admin/AIProductInsights'));
-const AdminInventoryPrediction = lazy(() => import('./pages/admin/InventoryPrediction'));
+const AdminUsers = lazy(() => import('./pages/admin/Users'));
+const AdminCustomerQueries = lazy(() => import('./pages/admin/CustomerQueries'));
 const AdminSmartCoupons = lazy(() => import('./pages/admin/SmartCoupons'));
-const AdminUserAnalytics = lazy(() => import('./pages/admin/UserAnalytics'));
-const AdminBudgetAnalytics = lazy(() => import('./pages/admin/BudgetAnalytics'));
-const AdminAIPerformance = lazy(() => import('./pages/admin/AIPerformance'));
 const AdminExportReports = lazy(() => import('./pages/admin/ExportReports'));
+const AdminSettings = lazy(() => import('./pages/admin/AdminSettings'));
+const AdminProfile = lazy(() => import('./pages/admin/AdminProfile'));
 
 // Layouts
 const MainLayout = lazy(() => import('./layouts/MainLayout'));
@@ -67,12 +69,12 @@ function App() {
       </div>
     }>
       <Routes>
-        {/* Standalone Login and Register Pages (No Navbar/Footer) */}
+        {/* Standalone Auth Pages */}
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
 
-        {/* Protected eCommerce Routes (Requires Login) */}
-        <Route element={<ProtectedRoute />}>
+        {/* Protected Customer eCommerce Routes */}
+        <Route element={<ProtectedRoute adminOnly={false} />}>
           <Route path="/" element={<MainLayout />}>
             <Route index element={<Home />} />
             <Route path="products" element={<Products />} />
@@ -88,24 +90,35 @@ function App() {
             <Route path="ai-recommendations" element={<AiRecommendations />} />
             <Route path="user/dashboard" element={<UserDashboard />} />
           </Route>
-
-          {/* Admin Protected BI Routes */}
-          <Route path="/admin" element={<ProtectedRoute adminOnly={true}><AdminLayout /></ProtectedRoute>}>
-            <Route index element={<AdminDashboard />} />
-            <Route path="profile" element={<AdminProfile />} />
-            <Route path="settings" element={<AdminSettings />} />
-            <Route path="ai-analytics" element={<AdminAIAnalytics />} />
-            <Route path="missing-requests" element={<AdminMissingRequests />} />
-            <Route path="ai-logs" element={<AdminAILogs />} />
-            <Route path="product-insights" element={<AdminProductInsights />} />
-            <Route path="inventory-prediction" element={<AdminInventoryPrediction />} />
-            <Route path="smart-coupons" element={<AdminSmartCoupons />} />
-            <Route path="user-analytics" element={<AdminUserAnalytics />} />
-            <Route path="budget-analytics" element={<AdminBudgetAnalytics />} />
-            <Route path="ai-performance" element={<AdminAIPerformance />} />
-            <Route path="reports" element={<AdminExportReports />} />
-          </Route>
         </Route>
+
+        {/* Protected Operational Admin Routes (Shopify / Seller Hub Style) */}
+        <Route
+          path="/admin"
+          element={
+            <ProtectedRoute adminOnly={true}>
+              <AdminErrorBoundary>
+                <AdminLayout />
+              </AdminErrorBoundary>
+            </ProtectedRoute>
+          }
+        >
+          <Route index element={<AdminDashboard />} />
+          <Route path="orders" element={<AdminOrders />} />
+          <Route path="products" element={<AdminProducts />} />
+          <Route path="categories" element={<AdminCategories />} />
+          <Route path="inventory" element={<AdminInventory />} />
+          <Route path="missing-requests" element={<AdminMissingRequests />} />
+          <Route path="users" element={<AdminUsers />} />
+          <Route path="customer-queries" element={<AdminCustomerQueries />} />
+          <Route path="smart-coupons" element={<AdminSmartCoupons />} />
+          <Route path="reports" element={<AdminExportReports />} />
+          <Route path="settings" element={<AdminSettings />} />
+          <Route path="profile" element={<AdminProfile />} />
+        </Route>
+
+        {/* Fallback redirect */}
+        <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </Suspense>
   );

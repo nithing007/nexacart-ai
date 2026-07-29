@@ -1,13 +1,13 @@
 import { useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { Link, useNavigate } from 'react-router-dom';
-import { Heart, ShoppingCart, Star, Sparkles, Check, X, ArrowRight, Volume2, VolumeX, Eye } from 'lucide-react';
+import { Heart, ShoppingCart, Star, Sparkles, Check, X, ArrowRight, Volume2, Eye, Play, Pause, RotateCcw } from 'lucide-react';
 import { addToCart } from '../../redux/slices/cartSlice';
 import { addToWishlist, removeFromWishlist } from '../../redux/slices/wishlistSlice';
 import { getFallbackImage } from '../../utils/imageHelper';
 import toast from 'react-hot-toast';
 
-// Helper to format text with Markdown bold (**text**), bullet points, checkmarks & section headers
+// Helper to format text with Markdown bold (**text**), bullet points, checkmarks & ChatGPT section headers
 const FormattedText = ({ content }) => {
   if (!content) return null;
 
@@ -64,10 +64,10 @@ const FormattedText = ({ content }) => {
           );
         }
 
-        // Section Headers (e.g. "Reason:", "Pros:", "Cons:", "Side-by-Side Comparison:")
-        if (/^(Reason|Pros|Cons|Recommendations|Next steps|Shopping Advice|Price Comparison|Budget Summary|Product Comparison Analysis|Side-by-Side Comparison|Recommendation):/i.test(trimmed)) {
+        // Section Headers (ChatGPT Shopping style)
+        if (/^(Reasoning|Best Match|Alternative|Budget Option|Pros|Cons|Recommendations|Next steps|Shopping Advice|Price Comparison|Budget Summary|Product Comparison Analysis|Side-by-Side Comparison|Recommendation):/i.test(trimmed)) {
           return (
-            <div key={idx} className="font-extrabold text-[11px] uppercase tracking-wider text-emerald-800 pt-1 border-t border-gray-100/60 mt-1.5">
+            <div key={idx} className="font-extrabold text-[11px] uppercase tracking-wider text-emerald-800 pt-1.5 border-t border-gray-100/60 mt-1.5">
               {parseBold(trimmed)}
             </div>
           );
@@ -79,13 +79,14 @@ const FormattedText = ({ content }) => {
   );
 };
 
-const ChatMessage = ({ message, onFollowUpClick, onSpeakMessage }) => {
+const ChatMessage = ({ message, onFollowUpClick, onSpeakMessage, onPauseSpeak, onResumeSpeak, onReplaySpeak }) => {
   const dispatch = useDispatch();
   const navigate = useNavigate();
   const { isAuthenticated } = useSelector((state) => state.auth);
   const { products: wishlistProducts } = useSelector((state) => state.wishlist);
 
   const [isPlayingAudio, setIsPlayingAudio] = useState(false);
+  const [isAudioPaused, setIsAudioPaused] = useState(false);
 
   const isUser = message.sender === 'user';
   const timestamp = message.timestamp || new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
@@ -156,8 +157,33 @@ const ChatMessage = ({ message, onFollowUpClick, onSpeakMessage }) => {
 
   const handleSpeakClick = () => {
     if (onSpeakMessage && message.text) {
-      setIsPlayingAudio(!isPlayingAudio);
-      onSpeakMessage(message.text, () => setIsPlayingAudio(false));
+      if (isPlayingAudio) {
+        if (isAudioPaused) {
+          if (onResumeSpeak) onResumeSpeak();
+          setIsAudioPaused(false);
+        } else {
+          if (onPauseSpeak) onPauseSpeak();
+          setIsAudioPaused(true);
+        }
+      } else {
+        setIsPlayingAudio(true);
+        setIsAudioPaused(false);
+        onSpeakMessage(message.text, () => {
+          setIsPlayingAudio(false);
+          setIsAudioPaused(false);
+        });
+      }
+    }
+  };
+
+  const handleReplayClick = () => {
+    if (onReplaySpeak && message.text) {
+      setIsPlayingAudio(true);
+      setIsAudioPaused(false);
+      onSpeakMessage(message.text, () => {
+        setIsPlayingAudio(false);
+        setIsAudioPaused(false);
+      });
     }
   };
 
@@ -184,15 +210,30 @@ const ChatMessage = ({ message, onFollowUpClick, onSpeakMessage }) => {
         {/* Main Message Card */}
         <div className="bg-white/95 border border-emerald-950/10 rounded-2xl rounded-tl-none px-4 py-3 shadow-md text-xs text-gray-900 leading-relaxed space-y-2 relative group">
           
-          {/* TTS Audio Speak Button */}
+          {/* REQUIREMENT 13: SPEECH RESPONSE AUDIO CONTROLS (Read Answer, Pause, Replay) */}
           {message.text && (
-            <button
-              onClick={handleSpeakClick}
-              className="absolute top-2.5 right-2.5 p-1 rounded-full text-gray-400 hover:text-emerald-600 hover:bg-emerald-50 transition-colors opacity-0 group-hover:opacity-100 focus:opacity-100"
-              title={isPlayingAudio ? "Stop Audio" : "Listen to Response"}
-            >
-              {isPlayingAudio ? <VolumeX className="w-3.5 h-3.5 text-emerald-600 animate-pulse" /> : <Volume2 className="w-3.5 h-3.5" />}
-            </button>
+            <div className="absolute top-2.5 right-2.5 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity bg-white/90 px-1.5 py-0.5 rounded-full border border-gray-200 shadow-xs">
+              <button
+                onClick={handleSpeakClick}
+                className="p-1 rounded-full text-gray-500 hover:text-emerald-600 hover:bg-emerald-50 transition-colors"
+                title={isPlayingAudio ? (isAudioPaused ? "Resume Audio" : "Pause Audio") : "Read Answer Aloud"}
+              >
+                {isPlayingAudio ? (
+                  isAudioPaused ? <Play className="w-3 h-3 text-emerald-600" /> : <Pause className="w-3 h-3 text-emerald-600 animate-pulse" />
+                ) : (
+                  <Volume2 className="w-3 h-3" />
+                )}
+              </button>
+              {isPlayingAudio && (
+                <button
+                  onClick={handleReplayClick}
+                  className="p-1 rounded-full text-gray-500 hover:text-emerald-600 hover:bg-emerald-50 transition-colors"
+                  title="Replay Audio"
+                >
+                  <RotateCcw className="w-3 h-3" />
+                </button>
+              )}
+            </div>
           )}
 
           {message.text && <FormattedText content={message.text} />}
@@ -201,7 +242,7 @@ const ChatMessage = ({ message, onFollowUpClick, onSpeakMessage }) => {
           {message.reasoning && (
             <div className="bg-gradient-to-r from-emerald-50 to-green-50/70 border border-emerald-100 rounded-xl p-3 space-y-1 text-[11px] text-emerald-950 shadow-inner">
               <span className="font-extrabold text-[10px] text-emerald-800 tracking-wide uppercase flex items-center gap-1">
-                <Sparkles className="w-3.5 h-3.5 text-emerald-600" /> AI Insights
+                <Sparkles className="w-3.5 h-3.5 text-emerald-600" /> Dynamic AI Insights
               </span>
               <p className="italic leading-relaxed">"{message.reasoning}"</p>
             </div>
@@ -215,8 +256,38 @@ const ChatMessage = ({ message, onFollowUpClick, onSpeakMessage }) => {
             </div>
           )}
 
+          {/* REQUIREMENT 5: SMART FALLBACK ACTION BUTTONS */}
+          {message.isSmartFallback && (
+            <div className="pt-2 border-t border-amber-200/60 bg-amber-50/50 p-2.5 rounded-xl space-y-2">
+              <p className="text-[10px] font-extrabold text-amber-900 uppercase tracking-wider">Smart Catalog Fallback Options:</p>
+              <div className="flex flex-wrap gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => handleChipClick('Show Alternatives')}
+                  className="px-3 py-1.5 text-[11px] font-extrabold bg-gradient-to-r from-amber-500 to-orange-500 text-black rounded-lg shadow-sm hover:scale-105 transition-all"
+                >
+                  Show Alternatives
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleChipClick('Change Budget')}
+                  className="px-3 py-1.5 text-[11px] font-extrabold bg-white text-gray-800 border border-gray-300 rounded-lg shadow-xs hover:bg-gray-50 transition-all"
+                >
+                  Change Budget
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleChipClick('Modify Specs')}
+                  className="px-3 py-1.5 text-[11px] font-extrabold bg-white text-gray-800 border border-gray-300 rounded-lg shadow-xs hover:bg-gray-50 transition-all"
+                >
+                  Modify Specs
+                </button>
+              </div>
+            </div>
+          )}
+
           {/* Smart Interactive Follow-up Chips */}
-          {message.followUps && message.followUps.length > 0 && (
+          {message.followUps && message.followUps.length > 0 && !message.isSmartFallback && (
             <div className="pt-2 border-t border-gray-100/80 space-y-1.5">
               <p className="text-[10px] uppercase font-extrabold text-emerald-800 tracking-wider">Suggested Next Actions:</p>
               <div className="flex flex-wrap gap-1.5">
@@ -243,7 +314,7 @@ const ChatMessage = ({ message, onFollowUpClick, onSpeakMessage }) => {
           </div>
         </div>
 
-        {/* Feature 19: Rich Product Recommendation Cards */}
+        {/* Feature 19 & Requirement 14: Validated Product Recommendation Cards */}
         {message.products && message.products.length > 0 && (
           <div className="flex gap-2.5 overflow-x-auto pb-2 scrollbar-thin scrollbar-thumb-emerald-200 scrollbar-track-transparent -mx-1 px-1">
             {message.products.map((product) => {
@@ -343,3 +414,4 @@ const ChatMessage = ({ message, onFollowUpClick, onSpeakMessage }) => {
 };
 
 export default ChatMessage;
+

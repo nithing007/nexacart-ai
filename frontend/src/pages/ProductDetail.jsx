@@ -19,12 +19,14 @@ const ProductDetail = () => {
   const { isAuthenticated } = useSelector((state) => state.auth);
 
   const [quantity, setQuantity] = useState(1);
+  const [selectedImgIdx, setSelectedImgIdx] = useState(0);
   const [aiRecommendations, setAiRecommendations] = useState([]);
   const [aiReasoning, setAiReasoning] = useState('');
   const [aiLoading, setAiLoading] = useState(false);
 
   useEffect(() => {
     dispatch(fetchProductDetails(id));
+    setTimeout(() => setSelectedImgIdx(0), 0);
 
     return () => {
       dispatch(clearProductDetails());
@@ -136,6 +138,10 @@ const ProductDetail = () => {
     ? Math.round(((product.originalPrice - product.price) / product.originalPrice) * 100)
     : 0;
 
+  const productImages = (product?.images && product.images.length > 0)
+    ? product.images 
+    : [product?.image || getFallbackImage(product?.category, product?.name)];
+
   return (
     <div className="max-w-6xl mx-auto space-y-12 py-4">
       {/* Back navigation */}
@@ -146,19 +152,46 @@ const ProductDetail = () => {
       {/* Main product overview */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-12 bg-white p-8 rounded-3xl shadow-sm border border-gray-100">
         
-        {/* Left Column: Image */}
-        <div className="bg-gray-50 rounded-3xl p-8 flex items-center justify-center border border-gray-100 relative h-[450px]">
-          {discount > 0 && (
-            <span className="absolute top-6 left-6 bg-red-500 text-white text-xs font-black px-4 py-2 rounded-full shadow-md z-10">
-              {discount}% OFF
-            </span>
+        {/* Left Column: Interactive Image Gallery */}
+        <div className="space-y-4">
+          <div className="bg-gray-50 rounded-3xl p-8 flex items-center justify-center border border-gray-100 relative h-[400px] sm:h-[450px] overflow-hidden group">
+            {discount > 0 && (
+              <span className="absolute top-6 left-6 bg-red-500 text-white text-xs font-black px-4 py-2 rounded-full shadow-md z-10">
+                {discount}% OFF
+              </span>
+            )}
+            <img 
+              src={productImages[selectedImgIdx] || product.image || getFallbackImage(product.category, product.name)} 
+              alt={product.name} 
+              className="object-contain max-h-full max-w-full rounded-2xl group-hover:scale-105 transition-transform duration-500 ease-out"
+              onError={(e) => { e.target.src = getFallbackImage(product.category, product.name); }}
+            />
+          </div>
+
+          {/* Multi-Angle Thumbnail Selector Bar */}
+          {productImages.length > 1 && (
+            <div className="flex items-center gap-3 overflow-x-auto pb-2 scrollbar-thin scrollbar-thumb-gray-200">
+              {productImages.map((imgUrl, idx) => (
+                <button
+                  key={idx}
+                  onClick={() => setSelectedImgIdx(idx)}
+                  className={`w-16 h-16 rounded-2xl border-2 p-1.5 bg-gray-50 flex items-center justify-center shrink-0 transition-all duration-200 ${
+                    selectedImgIdx === idx 
+                      ? 'border-emerald-600 ring-2 ring-emerald-500/20 scale-105 bg-white shadow-md' 
+                      : 'border-gray-200 hover:border-emerald-300 opacity-70 hover:opacity-100'
+                  }`}
+                  title={`View image ${idx + 1}`}
+                >
+                  <img 
+                    src={imgUrl} 
+                    alt={`${product.name} view ${idx + 1}`} 
+                    className="object-contain max-h-full max-w-full rounded-xl"
+                    onError={(e) => { e.target.src = getFallbackImage(product.category, product.name); }}
+                  />
+                </button>
+              ))}
+            </div>
           )}
-          <img 
-            src={product.image || getFallbackImage(product.category, product.name)} 
-            alt={product.name} 
-            className="object-contain max-h-full max-w-full rounded-2xl hover:scale-105 transition-transform duration-300"
-            onError={(e) => { e.target.src = getFallbackImage(product.category, product.name); }}
-          />
         </div>
 
         {/* Right Column: Information */}

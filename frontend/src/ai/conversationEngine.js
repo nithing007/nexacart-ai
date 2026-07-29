@@ -1,4 +1,4 @@
-import { INTENT_TYPES, classifyIntent } from './intentClassifier';
+import { INTENT_TYPES, CATEGORY_TYPES, BRAND_TYPO_MAP, classifyIntent, detectCategoryFromQuery } from './intentClassifier';
 import api from '../services/api';
 
 /**
@@ -33,32 +33,40 @@ export const extractBudget = (text = '') => {
 };
 
 /**
- * Extract structured specification filters from user request
+ * Extract structured specification filters from user request with fuzzy brand correction
  */
-export const extractStructuredSpecs = (query = '', currentMemory = {}) => {
+export const extractStructuredSpecs = (query = '', memoryBase = {}) => {
   const lower = query.toLowerCase();
 
+  // Correct common brand/tech spelling errors
+  let correctedQuery = lower;
+  Object.keys(BRAND_TYPO_MAP).forEach(typo => {
+    if (correctedQuery.includes(typo)) {
+      correctedQuery = correctedQuery.replace(new RegExp(`\\b${typo}\\b`, 'g'), BRAND_TYPO_MAP[typo].toLowerCase());
+    }
+  });
+
   const specs = {
-    category: currentMemory.category || '',
-    budget: extractBudget(query) || currentMemory.budget || null,
-    ram: currentMemory.ram || '',
-    storage: currentMemory.storage || '',
-    processor: currentMemory.processor || '',
-    brand: currentMemory.brand || '',
-    purpose: currentMemory.purpose || '',
-    subject: currentMemory.subject || ''
+    category: memoryBase.category || detectCategoryFromQuery(query) || '',
+    budget: extractBudget(query) || memoryBase.budget || null,
+    ram: memoryBase.ram || '',
+    storage: memoryBase.storage || '',
+    processor: memoryBase.processor || '',
+    brand: memoryBase.brand || '',
+    purpose: memoryBase.purpose || '',
+    subject: memoryBase.subject || ''
   };
 
-  // RAM extraction (e.g., 6GB RAM, 8GB, 16 GB)
+  // RAM extraction (e.g., 6GB RAM, 8GB, 16 GB, 6 GB)
   const ramMatch = lower.match(/(\d{1,2})\s*gb\s*ram/i) || lower.match(/\b(\d{1,2})\s*gb\b/i);
-  if (ramMatch && !lower.includes('storage') && !lower.includes('ssd') && !lower.includes('hdd')) {
+  if (ramMatch && !lower.includes('storage') && !lower.includes('ssd') && !lower.includes('hdd') && !lower.includes('rom')) {
     specs.ram = `${ramMatch[1]}GB`;
   }
 
   // Storage extraction (e.g., 128GB, 256GB, 512GB, 1TB)
-  const storageMatch = lower.match(/(\d{3}|\d\s*tb)\s*(?:storage|ssd|rom)/i);
-  if (storageMatch) {
-    specs.storage = storageMatch[1].toUpperCase();
+  const storageMatch = lower.match(/(\d{3}|\d\s*tb)\s*(?:storage|ssd|rom)/i) || lower.match(/\b(128|256|512)\s*gb\b/i);
+  if (storageMatch && specs.ram !== `${storageMatch[1]}GB`) {
+    specs.storage = storageMatch[1].toUpperCase().includes('GB') ? storageMatch[1].toUpperCase() : `${storageMatch[1]}GB`;
   }
 
   // Processor extraction
@@ -69,27 +77,30 @@ export const extractStructuredSpecs = (query = '', currentMemory = {}) => {
   else if (lower.includes('m1') || lower.includes('m2') || lower.includes('m3') || lower.includes('bionic')) specs.processor = 'Apple Silicon';
 
   // Brand extraction
-  const knownBrands = ['asus', 'samsung', 'apple', 'dell', 'lenovo', 'hp', 'acer', 'oppo', 'vivo', 'realme', 'oneplus', 'sony', 'nike', 'adidas'];
+  const knownBrands = ['asus', 'samsung', 'apple', 'dell', 'lenovo', 'hp', 'acer', 'oppo', 'vivo', 'realme', 'poco', 'oneplus', 'xiaomi', 'redmi', 'iqoo', 'sony', 'nike', 'adidas'];
   for (const b of knownBrands) {
-    if (lower.includes(b) || lower.includes(`only ${b}`)) {
+    if (correctedQuery.includes(b)) {
       specs.brand = b.toUpperCase();
       break;
     }
   }
 
-  // Subject / Category
-  if (lower.includes('laptop') || lower.includes('macbook')) {
+  // Subject & Category Detection
+  if (lower.includes('laptop') || lower.includes('macbook') || lower.includes('notebook')) {
     specs.subject = lower.includes('gaming') ? 'gaming laptop' : 'laptop';
-    specs.category = 'Electronics';
-  } else if (lower.includes('phone') || lower.includes('mobile') || lower.includes('smartphone')) {
-    specs.subject = lower.includes('gaming') ? 'gaming phone' : 'smartphone';
-    specs.category = 'Electronics';
+    specs.category = CATEGORY_TYPES.LAPTOPS;
+  } else if (lower.includes('phone') || lower.includes('mobile') || lower.includes('smartphone') || lower.includes('iphone')) {
+    specs.subject = lower.includes('gaming') ? 'gaming phone' : 'mobile phone';
+    specs.category = CATEGORY_TYPES.MOBILE_PHONES;
+  } else if (lower.includes('headphone') || lower.includes('earbud') || lower.includes('audio')) {
+    specs.subject = 'headphones & audio';
+    specs.category = CATEGORY_TYPES.HEADPHONES;
   } else if (lower.includes('grocer') || lower.includes('food') || lower.includes('avocado')) {
     specs.subject = 'groceries';
-    specs.category = 'Groceries';
+    specs.category = CATEGORY_TYPES.GROCERIES;
   } else if (lower.includes('shoe') || lower.includes('sneaker') || lower.includes('jacket') || lower.includes('fashion')) {
     specs.subject = 'shoes & fashion';
-    specs.category = 'Fashion';
+    specs.category = CATEGORY_TYPES.FASHION;
   }
 
   // Purpose
@@ -102,25 +113,95 @@ export const extractStructuredSpecs = (query = '', currentMemory = {}) => {
 };
 
 /**
+ * FEATURE 1: CONVERSATION ISOLATION ENGINE
+ * Checks whether user is continuing previous context or starting a new search reset.
+ */
+export const resolveContextIsolation = (query = '', currentMemory = {}) => {
+  const lower = query.toLowerCase();
+
+  // Continuation markers
+  const continuationPhrases = [
+    'what about', 'how about', 'also', 'under', 'cheaper', 'show alternatives',
+    'change budget', 'modify specs', 'compare these', 'compare them', 'with amoled',
+    'in black', 'with 8gb', 'with 16gb', 'show more', 'similar'
+  ];
+
+  const hasContinuationMarker = continuationPhrases.some(p => lower.includes(p));
+
+  const newDetectedCategory = detectCategoryFromQuery(query);
+
+  // If query specifies a NEW category that differs from memory category, RESET CONTEXT!
+  if (newDetectedCategory && currentMemory.category && newDetectedCategory !== currentMemory.category) {
+    return {
+      isReset: true,
+      cleanMemory: {
+        category: newDetectedCategory,
+        subject: '',
+        budget: null,
+        ram: '',
+        storage: '',
+        processor: '',
+        brand: '',
+        purpose: '',
+        lastQuery: query,
+        history: [...(currentMemory.history || []), { role: 'user', content: query }],
+        lastProducts: []
+      }
+    };
+  }
+
+  // If query does NOT have continuation markers and specifies a brand new product type, RESET!
+  const isFreshSearchQuery = (lower.includes('i want') || lower.includes('i need') || lower.includes('find me') || lower.includes('show me') || lower.includes('search'))
+    && !hasContinuationMarker;
+
+  if (isFreshSearchQuery) {
+    return {
+      isReset: true,
+      cleanMemory: {
+        category: newDetectedCategory || '',
+        subject: '',
+        budget: null,
+        ram: '',
+        storage: '',
+        processor: '',
+        brand: '',
+        purpose: '',
+        lastQuery: query,
+        history: [...(currentMemory.history || []), { role: 'user', content: query }],
+        lastProducts: []
+      }
+    };
+  }
+
+  return {
+    isReset: false,
+    cleanMemory: currentMemory
+  };
+};
+
+/**
  * Main Conversation Processor Engine
  */
 export const processUserMessage = async (userMessage, currentMemory = {}, userState = {}) => {
   const query = userMessage.trim();
   const lowerQuery = query.toLowerCase();
 
-  // Extract structured specs & update cumulative session memory
-  const specs = extractStructuredSpecs(query, currentMemory);
+  // Step 1: REQUIREMENT 1 - FIX AI CONTEXT LEAKING (Conversation Isolation)
+  const { cleanMemory } = resolveContextIsolation(query, currentMemory);
+
+  // Step 2: REQUIREMENT 2 & 3 - INTENT EXTRACTION & CATEGORY DETECTION
+  const specs = extractStructuredSpecs(query, cleanMemory);
 
   const updatedMemory = {
-    ...currentMemory,
+    ...cleanMemory,
     ...specs,
     lastQuery: query,
-    history: [...(currentMemory.history || []), { role: 'user', content: query }],
-    lastProducts: currentMemory.lastProducts || []
+    history: [...(cleanMemory.history || []), { role: 'user', content: query }],
+    lastProducts: cleanMemory.lastProducts || []
   };
 
   // Classify User Intent
-  const { intent, targetPath, isAmbiguousShopping } = classifyIntent(query);
+  const { intent, targetPath, isAmbiguousShopping, confidence } = classifyIntent(query);
 
   const userName = userState.user?.name ? userState.user.name.trim().split(' ')[0] : (userState.user?.firstName || null);
 
@@ -150,39 +231,27 @@ export const processUserMessage = async (userMessage, currentMemory = {}, userSt
 
     // =========================================================================
     // FEATURE 1: GREETING INTENT
-    // Never search MongoDB / products.
     // =========================================================================
     if (intent === INTENT_TYPES.GREETING) {
       const greetingPrefix = userName ? `Hello ${userName} 👋` : 'Hello 👋';
       return {
         text: `${greetingPrefix}\n\nWelcome back to NexaCart AI.\nHow can I help you shop today?`,
         products: [],
-        followUps: ["Gaming phone under ₹25,000", "Compare laptops", "Plan monthly budget", "Open Cart"],
+        followUps: ["Mobile phones under ₹20,000", "Compare gaming laptops", "Plan monthly budget", "Open Cart"],
         memory: updatedMemory,
         intent
       };
     }
 
     // =========================================================================
-    // FEATURE 1: GENERAL CONVERSATION (Identity, Creator, Persona)
-    // Never search MongoDB / products.
+    // FEATURE 1: GENERAL CONVERSATION (Identity, Persona, Greetings)
     // =========================================================================
     if (intent === INTENT_TYPES.GENERAL_CONVERSATION) {
       if (lowerQuery.includes('name') || lowerQuery.includes('who are you')) {
         return {
-          text: `I'm NexaCart AI, your personal shopping assistant.\nI can help you discover products, compare items, plan your monthly shopping budget, explain specifications, and answer shopping-related questions.`,
+          text: `I'm NexaCart AI, your personal AI shopping copilot.\nI can help you search our catalog, extract detailed tech specs, compare products, plan budgets, and find deals grounded strictly in our product catalog.`,
           products: [],
-          followUps: ["Show gaming laptops", "Compare Samsung and iPhone", "Explain OLED display", "Shopping advice"],
-          memory: updatedMemory,
-          intent
-        };
-      }
-
-      if (lowerQuery.includes('created') || lowerQuery.includes('made') || lowerQuery.includes('built')) {
-        return {
-          text: `I was built as the AI shopping assistant for the NexaCart AI platform to make shopping easier using conversational AI and intelligent product discovery.`,
-          products: [],
-          followUps: ["Recommend smartphones", "Show top laptops", "Plan a budget"],
+          followUps: ["Mobile phones", "Gaming laptops", "Compare Samsung and iPhone", "Shopping advice"],
           memory: updatedMemory,
           intent
         };
@@ -198,20 +267,10 @@ export const processUserMessage = async (userMessage, currentMemory = {}, userSt
         };
       }
 
-      if (lowerQuery.includes('bye') || lowerQuery.includes('goodbye')) {
-        return {
-          text: `Goodbye! 👋 Have a wonderful day and enjoy shopping on NexaCart!`,
-          products: [],
-          followUps: ["Start new search"],
-          memory: updatedMemory,
-          intent
-        };
-      }
-
       return {
-        text: `I'm doing great, thank you! 😊 I'm your NexaCart AI shopping copilot, ready to assist with product discovery, tech advice, budget planning, or order tracking.\n\nWhat can I help you with today?`,
+        text: `I'm your NexaCart AI shopping copilot! Ready to assist with catalog discovery, tech advice, budget planning, or order tracking.\n\nWhat can I help you find today?`,
         products: [],
-        followUps: ["Gaming laptops", "Smartphones under ₹20,000", "Track my order"],
+        followUps: ["Smartphones under ₹20,000", "Gaming laptops", "Track my order"],
         memory: updatedMemory,
         intent
       };
@@ -219,33 +278,22 @@ export const processUserMessage = async (userMessage, currentMemory = {}, userSt
 
     // =========================================================================
     // FEATURE 7: PRODUCT EXPLANATION INTENT
-    // Explain terms in simple beginner-friendly language without forcing redirects.
     // =========================================================================
     if (intent === INTENT_TYPES.PRODUCT_EXPLANATION) {
-      if (lowerQuery.includes('oled')) {
+      if (lowerQuery.includes('oled') || lowerQuery.includes('amoled')) {
         return {
-          text: `**OLED (Organic Light-Emitting Diode) Display Explained:**\n\nAn OLED screen is made of millions of tiny individual pixels that generate their own light. When showing black, those pixels turn off completely.\n\n• **True Pitch Black**: Produces infinite contrast because black areas emit zero light.\n• **Vibrant Colors**: Colors pop with exceptional clarity and realism.\n• **Fast Response**: Virtually instant pixel transitions, eliminating motion blur in high-speed gaming.\n\nUnlike traditional LED screens that use a glowing backlight behind the entire panel, OLED gives you deep blacks and striking contrast.`,
+          text: `**OLED & AMOLED Display Technology:**\n\n• **True Pitch Black**: Individual self-lit pixels turn off completely, yielding infinite contrast ratio.\n• **Vibrant Color Punch**: Richer color saturation and wider viewing angles compared to standard LCD screens.\n• **Fast Pixel Response**: Ultra-low latency motion handling ideal for mobile gaming and videos.`,
           products: [],
-          followUps: ["Show OLED laptops", "Show OLED phones", "Compare IPS vs OLED"],
-          memory: updatedMemory,
-          intent
-        };
-      }
-
-      if (lowerQuery.includes('ram')) {
-        return {
-          text: `**RAM (Random Access Memory) Explained:**\n\nRAM acts as your device's short-term workspace memory. It holds active apps and browser tabs so your processor can access them instantly.\n\n• **8GB RAM**: Great for web browsing, streaming video, and everyday office tasks.\n• **16GB RAM**: Recommended standard for smooth multitasking, coding, and modern gaming.\n• **32GB+ RAM**: Ideal for heavy video rendering, 3D graphics, and virtual machines.`,
-          products: [],
-          followUps: ["Show 16GB laptops", "Show gaming phones"],
+          followUps: ["Show AMOLED phones", "Show OLED laptops", "Compare IPS vs OLED"],
           memory: updatedMemory,
           intent
         };
       }
 
       return {
-        text: `**Key Hardware Specifications Overview:**\n\nModern electronics depend on processor speed, high-speed RAM for multitasking, and fast NVMe storage for instant boot times.\n\nLet me know if you would like me to explain any specific technology in detail or search for products featuring these specs!`,
+        text: `**Hardware Specifications Overview:**\n\nHigh performance in modern electronics relies on fast multi-core processors, sufficient RAM for multitasking, and fast NVMe flash storage.\n\nLet me know if you'd like to search our catalog for products with specific specs!`,
         products: [],
-        followUps: ["Explain OLED display", "Explain RAM", "Search laptops"],
+        followUps: ["Explain RAM", "Explain Processors", "Search phones"],
         memory: updatedMemory,
         intent
       };
@@ -253,40 +301,29 @@ export const processUserMessage = async (userMessage, currentMemory = {}, userSt
 
     // =========================================================================
     // FEATURE 8: SHOPPING ADVICE INTENT
-    // Answer shopping questions conversationally.
     // =========================================================================
     if (intent === INTENT_TYPES.SHOPPING_ADVICE) {
       if (lowerQuery.includes('processor') || lowerQuery.includes('snapdragon') || lowerQuery.includes('mediatek')) {
         return {
-          text: `**Snapdragon vs. MediaTek Processors for Gaming:**\n\n• **Qualcomm Snapdragon**: Renowned for superior Adreno GPU efficiency, thermal stability during sustained gaming sessions, and excellent developer optimization for mobile games.\n• **MediaTek Dimensity**: Offers extraordinary multi-core raw performance and high power efficiency at lower price points.\n\n**Verdict**: Snapdragon is slightly favored for sustained high-FPS mobile gaming stability, while MediaTek Dimensity offers unbeatable value in mid-range smartphones.`,
+          text: `**MediaTek Dimensity vs. Qualcomm Snapdragon:**\n\n• **Qualcomm Snapdragon**: Renowned for GPU gaming stability, Adreno graphics efficiency, and optimal developer support.\n• **MediaTek Dimensity**: Delivers extraordinary multi-core CPU power and high energy efficiency at lower price points.\n\n**Verdict**: Both offer high performance. MediaTek provides high value in mid-range phones, while Snapdragon leads in sustained flagship mobile gaming.`,
           products: [],
-          followUps: ["Show Snapdragon phones", "Show MediaTek phones", "Gaming phones under ₹25,000"],
-          memory: updatedMemory,
-          intent
-        };
-      }
-
-      if (lowerQuery.includes('ips') && lowerQuery.includes('oled')) {
-        return {
-          text: `**IPS vs. OLED Displays:**\n\n• **IPS LCD**: Consistent color accuracy, no burn-in risk, brighter in direct outdoor sunlight, and more affordable.\n• **OLED**: Perfect pitch black levels, vibrant contrast, faster pixel response time, but carries a small risk of burn-in if static images stay on for long periods.\n\n**Recommendation**: Choose IPS for long productivity sessions/work. Choose OLED for immersive movie watching and high-contrast gaming.`,
-          products: [],
-          followUps: ["Show OLED laptops", "Show IPS gaming laptops"],
+          followUps: ["Show MediaTek phones", "Show Snapdragon phones", "Phones under ₹20,000"],
           memory: updatedMemory,
           intent
         };
       }
 
       return {
-        text: `**Shopping Expert Advice:**\n\nWhen buying tech hardware in 2026, prioritize:\n1. At least **16GB RAM** for laptops or **8GB RAM** for smartphones.\n2. **SSD storage** over traditional hard drives.\n3. Efficient high-refresh-rate displays for smooth visual output.`,
+        text: `**Shopping Expert Advice:**\n\nWhen buying smartphones in 2026, look for:\n1. At least **6GB to 8GB RAM** for smooth multitasking.\n2. Minimum **128GB storage** for apps and videos.\n3. Reliable chipset like **MediaTek Dimensity** or **Snapdragon**.`,
         products: [],
-        followUps: ["Find 16GB laptops", "Find smartphones"],
+        followUps: ["Phones under ₹20,000", "Show 8GB RAM phones"],
         memory: updatedMemory,
         intent
       };
     }
 
     // =========================================================================
-    // FEATURE 7, 8, 9, 11, 12: CART / WISHLIST / ORDERS INTENT
+    // FEATURE 7, 8, 9: CART / WISHLIST / ORDERS INTENT
     // =========================================================================
     if (intent === INTENT_TYPES.CART || intent === INTENT_TYPES.WISHLIST || intent === INTENT_TYPES.ORDER_TRACKING) {
       const cartItems = userState.cart?.items || [];
@@ -296,9 +333,9 @@ export const processUserMessage = async (userMessage, currentMemory = {}, userSt
       if (intent === INTENT_TYPES.CART) {
         if (cartItems.length === 0) {
           return {
-            text: `Your shopping cart is currently empty 🛒\n\nWould you like me to recommend top-rated products available in our shop?`,
+            text: `Your shopping cart is currently empty 🛒\n\nWould you like me to show top deals available in our store?`,
             products: [],
-            followUps: ["Show gaming laptops", "Smartphones under ₹20,000", "Browse Shop"],
+            followUps: ["Smartphones under ₹20,000", "Show laptops", "Browse Shop"],
             memory: updatedMemory,
             intent
           };
@@ -359,77 +396,34 @@ export const processUserMessage = async (userMessage, currentMemory = {}, userSt
     }
 
     // =========================================================================
-    // FEATURE 6 & 14: PRODUCT COMPARISON INTENT
+    // FEATURE 15: LOW CONFIDENCE / AMBIGUOUS CLARIFICATION TRIGGER
     // =========================================================================
-    if (intent === INTENT_TYPES.PRODUCT_COMPARISON) {
-      let allProducts = [];
-      try {
-        const res = await api.get('/products');
-        allProducts = res.data || [];
-      } catch (err) {
-        console.warn('Catalog fetch failed for comparison:', err);
-      }
-
-      // Check if user said "compare the first two" or "compare previous"
-      let itemsToCompare = [];
-      if (lowerQuery.includes('first two') || lowerQuery.includes('compare these') || lowerQuery.includes('compare previous')) {
-        itemsToCompare = (updatedMemory.lastProducts || []).slice(0, 2);
-      }
-
-      if (itemsToCompare.length < 2) {
-        itemsToCompare = filterProductsForComparison(allProducts, query, updatedMemory);
-      }
-
-      if (itemsToCompare.length < 2 && allProducts.length >= 2) {
-        itemsToCompare = allProducts.slice(0, 2);
-      }
-
-      const p1 = itemsToCompare[0] || { name: 'Option 1', price: 25000, category: 'Electronics' };
-      const p2 = itemsToCompare[1] || { name: 'Option 2', price: 30000, category: 'Electronics' };
-
-      const structuredComparison = `**Product Comparison: ${p1.name} vs. ${p2.name}**\n\n` +
-        `• **Price**: ${p1.name} (${formatINR(p1.price)}) vs ${p2.name} (${formatINR(p2.price)})\n` +
-        `• **Display**: ${p1.name} (Full HD High Refresh Rate) vs ${p2.name} (High Contrast Display)\n` +
-        `• **Battery**: ${p1.name} (All-day battery efficiency) vs ${p2.name} (Fast charging support)\n` +
-        `• **Camera / Specs**: ${p1.name} (${p1.category} Specs) vs ${p2.name} (${p2.category} Specs)\n` +
-        `• **Processor**: ${p1.name} (Optimized performance) vs ${p2.name} (High-speed multi-tasking)\n\n` +
-        `**Pros & Cons:**\n` +
-        `✔ **${p1.name}**: ${p1.price < p2.price ? 'More affordable price point' : 'Superior build quality and rating'}\n` +
-        `✖ **${p1.name}**: Higher weight package\n` +
-        `✔ **${p2.name}**: ${p2.price < p1.price ? 'Lower initial budget impact' : 'Higher overall user rating'}\n` +
-        `✖ **${p2.name}**: Premium cost factor\n\n` +
-        `**Recommendation**: If you prefer better budget efficiency, choose **${p1.price <= p2.price ? p1.name : p2.name}**. For maximum feature performance, select **${p1.price > p2.price ? p1.name : p2.name}**.`;
-
-      return {
-        text: structuredComparison,
-        products: itemsToCompare,
-        followUps: [`Add ${p1.name} to Cart`, `Add ${p2.name} to Cart`, "Show cheaper options"],
-        memory: { ...updatedMemory, lastProducts: itemsToCompare },
-        intent
-      };
-    }
-
-    // =========================================================================
-    // FEATURE 3 & 4: STRUCTURED PRODUCT SEARCH & ZERO HALLUCINATION
-    // =========================================================================
-    if (intent === INTENT_TYPES.PRODUCT_SEARCH) {
-
-      // Handle ambiguous request follow-up prompt
-      if (isAmbiguousShopping && !updatedMemory.budget && !updatedMemory.brand && !updatedMemory.purpose) {
-        const itemType = updatedMemory.subject || 'product';
+    if (isAmbiguousShopping && confidence < 0.8 && !updatedMemory.ram && !updatedMemory.processor && !updatedMemory.budget) {
+      if (lowerQuery.includes('mediatek') && !lowerQuery.includes('phone') && !lowerQuery.includes('tablet')) {
         return {
-          text: `Sure! I'd be happy to help you find the perfect ${itemType}.\n\nCould you specify:\n• your preferred budget?\n• brand preference (e.g. ASUS, Apple, Samsung, Dell)?\n• primary use (gaming, coding, office work, daily use)?`,
+          text: `Did you mean:\n\n• **MediaTek Mobile Phone**\n• **MediaTek Tablet**?\n\nPlease clarify so I can search the right category in our catalog!`,
           products: [],
-          followUps: [
-            `Gaming ${itemType} (under ₹70,000)`,
-            `Office & Coding ${itemType} (under ₹50,000)`,
-            `Everyday ${itemType} (under ₹25,000)`
-          ],
+          followUps: ["MediaTek mobile phone", "MediaTek tablet"],
           memory: updatedMemory,
           intent
         };
       }
 
+      if (lowerQuery.includes('phone') && !updatedMemory.budget) {
+        return {
+          text: `I can help you find a great mobile phone! 📱\n\nCould you also specify your preferred budget?\n• Under ₹15,000\n• Under ₹25,000\n• Under ₹50,000`,
+          products: [],
+          followUps: ["Phone under ₹15,000", "Phone under ₹25,000", "Phone under ₹50,000"],
+          memory: updatedMemory,
+          intent
+        };
+      }
+    }
+
+    // =========================================================================
+    // FEATURE 3, 4, 5, 6, 7, 8, 14: STRUCTURED PRODUCT SEARCH & RANKING PIPELINE
+    // =========================================================================
+    if (intent === INTENT_TYPES.PRODUCT_SEARCH || intent === INTENT_TYPES.PRODUCT_COMPARISON) {
       // Fetch MongoDB Catalog
       let allProducts = [];
       try {
@@ -439,58 +433,101 @@ export const processUserMessage = async (userMessage, currentMemory = {}, userSt
         console.warn('Catalog fetch failed:', err);
       }
 
-      // Strict Filter MongoDB Catalog using extracted parameters
-      const { matchedProducts, missingCriteria } = filterCatalogProducts(allProducts, query, updatedMemory);
+      // Perform Strict Product Filtering & Multi-Factor Ranking
+      const {
+        matchedProducts,
+        nearAlternatives,
+        missingCriteria,
+        detectedCategoryName
+      } = runStrictSearchPipeline(allProducts, query, updatedMemory);
 
-      // FEATURE 4: ZERO HALLUCINATION PRODUCT SEARCH
-      // If NO products match all requirements, return structured refusal. NEVER INVENT PRODUCTS!
+      // FEATURE 4: STRICT PRODUCT FILTERING & ZERO HALLUCINATION REFUSAL
       if (matchedProducts.length === 0) {
-        const missingList = missingCriteria.length > 0
-          ? missingCriteria.map(c => `✓ ${c}`).join('\n')
-          : `✓ ${updatedMemory.brand || 'Specified Brand'}\n✓ ${updatedMemory.budget ? formatINR(updatedMemory.budget) : 'Price Target'}\n✓ Specified Specifications`;
+        // Step A: Check if near alternatives exist in the SAME category (REQUIREMENT 5: SMART FALLBACK)
+        if (nearAlternatives.length > 0) {
+          const requestedSpecStr = updatedMemory.processor || updatedMemory.brand || 'specified model';
+          const altProcessor = nearAlternatives[0].name.includes('Snapdragon') ? 'Snapdragon' : 'available';
 
-        const refusalText = `I'm sorry, I searched our current catalog but couldn't find a product matching:\n\n${missingList}\n\nWould you like me to:\n\n• remove the processor/brand requirement\n• increase your budget limit\n• show similar ${updatedMemory.subject || 'products'} available in stock\n• notify you when matching products become available?`;
+          const fallbackQuestionText = `We couldn't find a **${requestedSpecStr}** ${detectedCategoryName.toLowerCase()} in our catalog.\n\nWould you like to see similar ${detectedCategoryName.toLowerCase()}s with **${altProcessor}** processors?`;
+
+          return {
+            text: fallbackQuestionText,
+            isSmartFallback: true,
+            fallbackOptions: nearAlternatives.slice(0, 3),
+            products: [],
+            followUps: ["Show Alternatives", "Change Budget", "Modify Specs"],
+            memory: updatedMemory,
+            intent
+          };
+        }
+
+        // Step B: Zero Hallucination Refusal Response (REQUIREMENT 4)
+        const missingList = missingCriteria.length > 0
+          ? missingCriteria.map(c => `• ${c}`).join('\n')
+          : `• ${updatedMemory.ram || '6GB RAM'}\n• ${updatedMemory.storage || '128GB Storage'}\n• ${updatedMemory.processor || 'MediaTek Processor'}`;
+
+        const categoryLabel = detectedCategoryName ? detectedCategoryName.toLowerCase() : 'product';
+
+        const refusalText = `Sorry, we currently don't have a ${categoryLabel} matching:\n\n${missingList}\n\nin our catalog.`;
 
         return {
           text: refusalText,
-          products: getPopularCategoryFallback(allProducts, updatedMemory.category),
+          products: [],
           followUps: [
-            "Increase budget",
-            "Remove brand filter",
-            `Show available ${updatedMemory.subject || 'items'}`
+            `Show all ${categoryLabel}s`,
+            "Change Budget",
+            "Modify Specs"
           ],
           memory: updatedMemory,
           intent
         };
       }
 
-      // Products exist! Ask Gemini for natural explanation of WHY each product matches.
-      let reasoningText = `Matches your specified ${updatedMemory.brand ? `${updatedMemory.brand} brand, ` : ''}${updatedMemory.budget ? `budget under ${formatINR(updatedMemory.budget)}, ` : ''}and performance requirements.`;
-      try {
-        const prompt = `User asked: "${query}". Explain in 2 concise bullet sentences why these matching products are ideal: ${matchedProducts.slice(0, 3).map(p => p.name).join(', ')}.`;
-        const geminiRes = await api.post('/ai/test', { prompt });
-        if (geminiRes.data?.response) {
-          reasoningText = geminiRes.data.response;
-        }
-      } catch {
-        // Fallback to local reasoning
+      // REQUIREMENT 8: CHATGPT SHOPPING RESPONSE FORMAT
+      const topMatches = matchedProducts.slice(0, 3);
+      const reasoningBullets = [];
+      if (updatedMemory.processor) reasoningBullets.push(`✓ ${updatedMemory.processor} processor`);
+      if (updatedMemory.ram) reasoningBullets.push(`✓ ${updatedMemory.ram} RAM`);
+      if (updatedMemory.storage) reasoningBullets.push(`✓ ${updatedMemory.storage} storage`);
+      if (updatedMemory.brand) reasoningBullets.push(`✓ ${updatedMemory.brand} brand`);
+      if (updatedMemory.budget) reasoningBullets.push(`✓ Under ${formatINR(updatedMemory.budget)}`);
+      reasoningBullets.push('✓ Available in catalog');
+
+      const bestMatch = topMatches[0];
+      const altMatch = topMatches[1];
+      const budgetMatch = topMatches.length > 2 ? topMatches[2] : null;
+
+      let formattedResponseText = `I found ${topMatches.length} ${detectedCategoryName.toLowerCase()}s matching your requirements.\n\n` +
+        `**Reasoning:**\n${reasoningBullets.join('\n')}\n\n` +
+        `**Best Match:**\n${bestMatch.name} (${formatINR(bestMatch.price)}) - High spec match with rating ${bestMatch.rating}⭐.`;
+
+      if (altMatch) {
+        formattedResponseText += `\n\n**Alternative:**\n${altMatch.name} (${formatINR(altMatch.price)}) - Excellent alternative in the same category.`;
+      }
+      if (budgetMatch) {
+        formattedResponseText += `\n\n**Budget Option:**\n${budgetMatch.name} (${formatINR(budgetMatch.price)}) - Most budget-friendly choice available.`;
       }
 
+      // REQUIREMENT 6: DYNAMIC CATEGORY-SPECIFIC AI INSIGHTS
+      const categoryInsightsText = generateCategoryInsights(detectedCategoryName, bestMatch, updatedMemory);
+
+      // REQUIREMENT 9: CONVERSATIONAL FOLLOW-UP CHIPS
+      const categoryFollowUps = generateCategoryFollowUps(detectedCategoryName, updatedMemory);
+
       return {
-        text: `Here are the top matches available in our NexaCart catalog for **"${query}"**:`,
-        reasoning: reasoningText,
-        products: matchedProducts.slice(0, 5),
-        followUps: ["Compare the first two", "Show cheaper options", "Check specs"],
-        memory: { ...updatedMemory, lastProducts: matchedProducts.slice(0, 5) },
+        text: formattedResponseText,
+        reasoning: categoryInsightsText,
+        products: topMatches,
+        followUps: categoryFollowUps,
+        memory: { ...updatedMemory, lastProducts: topMatches },
         intent
       };
     }
 
   } catch (err) {
     console.error('Conversation Engine Error:', err);
-    // FEATURE 23: FRIENDLY ERROR HANDLING
     return {
-      text: "I'm having trouble connecting right now. Please try again in a moment.",
+      text: "I'm having trouble connecting to catalog search right now. Please try again in a moment.",
       products: [],
       followUps: ["Try again", "Browse shop"],
       memory: updatedMemory,
@@ -502,93 +539,185 @@ export const processUserMessage = async (userMessage, currentMemory = {}, userSt
   return {
     text: "How can I assist your shopping experience today on NexaCart?",
     products: [],
-    followUps: ["Recommend laptops", "Compare products", "Check budget"],
+    followUps: ["Smartphones under ₹20,000", "Compare laptops", "Check budget"],
     memory: updatedMemory,
     intent
   };
 };
 
 /**
- * Filter catalog products strictly and track missing criteria for Zero Hallucination check
+ * REQUIREMENT 3, 4, 7, 14: STRICT SEARCH PIPELINE & MULTI-FACTOR RANKING
  */
-const filterCatalogProducts = (products = [], query = '', memory = {}) => {
-  const lower = query.toLowerCase();
+
+const runStrictSearchPipeline = (products = [], query = '', memory = {}) => {
+  // Detect exact target category
+  const targetCategory = memory.category || detectCategoryFromQuery(query) || CATEGORY_TYPES.MOBILE_PHONES;
 
   const missingCriteria = [];
 
-  const matched = products.filter(p => {
-    const pName = p.name.toLowerCase();
-    const pDesc = (p.description || '').toLowerCase();
+  // Track extracted target specs
+  if (memory.ram) missingCriteria.push(`${memory.ram} RAM`);
+  if (memory.storage) missingCriteria.push(`${memory.storage} Storage`);
+  if (memory.processor) missingCriteria.push(`${memory.processor} Processor`);
+  if (memory.brand) missingCriteria.push(`${memory.brand} Brand`);
+  if (memory.budget) missingCriteria.push(`Budget under ${formatINR(memory.budget)}`);
+
+  // Step 1: Category Filter (Strict Boundary!)
+  const categoryPool = products.filter(p => {
     const pCat = (p.category || '').toLowerCase();
+    const pName = (p.name || '').toLowerCase();
 
-    // 1. Budget constraint
-    if (memory.budget && p.price > memory.budget) {
-      if (!missingCriteria.includes(`Budget under ${formatINR(memory.budget)}`)) {
-        missingCriteria.push(`Budget under ${formatINR(memory.budget)}`);
-      }
-      return false;
+    if (targetCategory === CATEGORY_TYPES.MOBILE_PHONES) {
+      const isPhone = pCat.includes('mobile') || pCat.includes('phone') || pName.includes('phone') || pName.includes('mobile') || pName.includes('iphone') || pName.includes('galaxy') || pName.includes('5g') || (pCat.includes('electronics') && (pName.includes('samsung') || pName.includes('realme') || pName.includes('poco') || pName.includes('vivo') || pName.includes('oppo') || pName.includes('redmi') || pName.includes('oneplus') || pName.includes('nothing') || pName.includes('motorola') || pName.includes('iqoo') || pName.includes('xiaomi') || pName.includes('infinix') || pName.includes('tecno') || pName.includes('nokia') || pName.includes('honor')));
+      const isForbidden = pName.includes('headphone') || pName.includes('laptop') || pName.includes('macbook') || pName.includes('charger') || pName.includes('monitor') || pName.includes('keyboard');
+      return isPhone && !isForbidden;
     }
 
-    // 2. Brand constraint
-    if (memory.brand) {
-      const brandLower = memory.brand.toLowerCase();
-      if (!pName.includes(brandLower) && !pDesc.includes(brandLower)) {
-        if (!missingCriteria.includes(`${memory.brand} Brand`)) {
-          missingCriteria.push(`${memory.brand} Brand`);
-        }
-        return false;
-      }
+    if (targetCategory === CATEGORY_TYPES.LAPTOPS) {
+      const isLaptop = pName.includes('laptop') || pName.includes('macbook') || pName.includes('notebook');
+      return isLaptop;
     }
 
-    // 3. Category constraint
-    if (memory.category && memory.category.toLowerCase() !== 'all') {
-      const catLower = memory.category.toLowerCase();
-      if (catLower === 'electronics' && (pCat.includes('fashion') || pCat.includes('grocer'))) return false;
-      if (catLower === 'groceries' && !pCat.includes('grocer')) return false;
-      if (catLower === 'fashion' && !pCat.includes('fashion') && !pName.includes('shoe')) return false;
+    if (targetCategory === CATEGORY_TYPES.HEADPHONES) {
+      return pName.includes('headphone') || pName.includes('earbud') || pName.includes('audio');
     }
 
-    // 4. Keyword / Subject constraint
-    if (memory.subject) {
-      const subLower = memory.subject.toLowerCase();
-      if (subLower.includes('laptop') && !pName.includes('laptop') && !pName.includes('macbook')) return false;
-      if (subLower.includes('phone') && !pName.includes('phone') && !pName.includes('mobile') && !pName.includes('iphone') && !pName.includes('samsung')) return false;
+    if (targetCategory === CATEGORY_TYPES.GROCERIES) {
+      return pCat.includes('grocer') || pName.includes('avocado') || pName.includes('food');
     }
 
-    // 5. Query matching check
-    const queryTokens = lower.split(/\s+/).filter(t => t.length > 3 && !['under', 'with', 'need', 'show', 'only', 'from', 'this', 'that', 'have'].includes(t));
-    if (queryTokens.length > 0) {
-      const tokenMatchCount = queryTokens.filter(t => pName.includes(t) || pDesc.includes(t)).length;
-      if (tokenMatchCount === 0 && !pName.includes(lower)) return false;
+    if (targetCategory === CATEGORY_TYPES.FASHION) {
+      return pCat.includes('fashion') || pName.includes('shoe') || pName.includes('sneaker');
     }
 
     return true;
-  }).sort((a, b) => (b.rating || 0) - (a.rating || 0));
+  });
+
+  // Step 2: Strict Spec Filtering & Scoring
+  const matched = [];
+  const nearAlternatives = [];
+
+  categoryPool.forEach(product => {
+    const pName = product.name.toLowerCase();
+    const pDesc = (product.description || '').toLowerCase();
+
+    let specMatchScore = 100;
+    let satisfiesAllStrict = true;
+
+    // Processor check
+    if (memory.processor) {
+      const procLower = memory.processor.toLowerCase();
+      if (!pName.includes(procLower) && !pDesc.includes(procLower)) {
+        satisfiesAllStrict = false;
+        specMatchScore -= 40;
+      }
+    }
+
+    // RAM check
+    if (memory.ram) {
+      const ramLower = memory.ram.toLowerCase();
+      if (!pName.includes(ramLower) && !pDesc.includes(ramLower)) {
+        satisfiesAllStrict = false;
+        specMatchScore -= 20;
+      }
+    }
+
+    // Storage check
+    if (memory.storage) {
+      const storLower = memory.storage.toLowerCase();
+      if (!pName.includes(storLower) && !pDesc.includes(storLower)) {
+        satisfiesAllStrict = false;
+        specMatchScore -= 20;
+      }
+    }
+
+    // Brand check
+    if (memory.brand) {
+      const brandLower = memory.brand.toLowerCase();
+      if (!pName.includes(brandLower) && !pDesc.includes(brandLower)) {
+        satisfiesAllStrict = false;
+        specMatchScore -= 30;
+      }
+    }
+
+    // Budget check
+    if (memory.budget && product.price > memory.budget) {
+      satisfiesAllStrict = false;
+      specMatchScore -= 30;
+    }
+
+    // REQUIREMENT 7: MULTI-FACTOR RANKING SCORE
+    // Score = Spec Match (50%) + Rating (25%) + Price Efficiency (25%)
+    const ratingScore = (product.rating || 4.0) * 10;
+    const priceEfficiency = memory.budget ? Math.max(0, 100 - Math.abs(memory.budget - product.price) / 1000) : 50;
+
+    const totalScore = (specMatchScore * 0.5) + (ratingScore * 0.25) + (priceEfficiency * 0.25);
+    product._rankScore = totalScore;
+
+    if (satisfiesAllStrict) {
+      matched.push(product);
+    } else if (specMatchScore >= 40) {
+      nearAlternatives.push(product);
+    }
+  });
+
+  // Sort by calculated multi-factor rank score
+  matched.sort((a, b) => (b._rankScore || 0) - (a._rankScore || 0));
+  nearAlternatives.sort((a, b) => (b._rankScore || 0) - (a._rankScore || 0));
 
   return {
     matchedProducts: matched,
-    missingCriteria: Array.from(new Set(missingCriteria))
+    nearAlternatives,
+    missingCriteria: Array.from(new Set(missingCriteria)),
+    detectedCategoryName: targetCategory
   };
 };
 
-const filterProductsForComparison = (products = [], query = '', memory = {}) => {
-  const lower = query.toLowerCase();
-  const matched = products.filter(p => {
-    const nameLower = p.name.toLowerCase();
-    return lower.includes(nameLower) || nameLower.split(' ').some(w => w.length > 3 && lower.includes(w));
-  });
-
-  if (matched.length >= 2) return matched.slice(0, 4);
-
-  // Return top products from memory category or all
-  const cat = memory.category || 'Electronics';
-  return products.filter(p => p.category === cat).slice(0, 2);
-};
-
-const getPopularCategoryFallback = (products = [], category = '') => {
-  if (category) {
-    const items = products.filter(p => p.category === category);
-    if (items.length > 0) return items.slice(0, 3);
+/**
+ * REQUIREMENT 6: DYNAMIC CATEGORY-SPECIFIC AI INSIGHTS
+ */
+const generateCategoryInsights = (categoryName = '', bestProduct = {}) => {
+  if (categoryName === CATEGORY_TYPES.MOBILE_PHONES) {
+    return `For mobile phones, performance relies on RAM capacity, processor efficiency (e.g. MediaTek/Snapdragon), battery size, and display technology. ${bestProduct.name || 'Selected items'} delivers smooth daily multitasking and gaming stability without overheating.`;
   }
-  return products.slice(0, 3);
+
+  if (categoryName === CATEGORY_TYPES.LAPTOPS) {
+    return `For laptops, priorities include CPU core speed, high-speed RAM, fast NVMe SSD storage, and thermal cooling efficiency for heavy workloads.`;
+  }
+
+  if (categoryName === CATEGORY_TYPES.GROCERIES) {
+    return `Selected grocery items focus on organic freshness, nutritional standards, and high customer satisfaction ratings.`;
+  }
+
+  return `Products are evaluated based on specification match, user ratings, price efficiency, and catalog availability.`;
 };
+
+/**
+ * REQUIREMENT 9: CONVERSATIONAL FOLLOW-UP CHIPS
+ */
+const generateCategoryFollowUps = (categoryName = '') => {
+  if (categoryName === CATEGORY_TYPES.MOBILE_PHONES) {
+    return [
+      "Compare these phones",
+      "See camera comparison",
+      "Filter under ₹20,000",
+      "Only AMOLED displays"
+    ];
+  }
+
+  if (categoryName === CATEGORY_TYPES.LAPTOPS) {
+    return [
+      "Compare GPU benchmarks",
+      "Filter under ₹60,000",
+      "16GB RAM laptops only",
+      "Check battery life"
+    ];
+  }
+
+  return [
+    "Compare top picks",
+    "Show cheaper options",
+    "Check availability"
+  ];
+};
+

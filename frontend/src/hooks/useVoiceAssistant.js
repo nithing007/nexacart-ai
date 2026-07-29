@@ -2,12 +2,14 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 
 /**
  * Custom Hook for Web Speech API Voice Assistant
- * Manages Speech-to-Text (STT) recording and Text-to-Speech (TTS) response synthesis.
+ * Manages Speech-to-Text (STT) recording, live status phases, and Text-to-Speech (TTS) response synthesis.
  */
 export const useVoiceAssistant = () => {
   const [isListening, setIsListening] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
+  const [isPaused, setIsPaused] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
+  const [voiceStatus, setVoiceStatus] = useState('idle'); // 'idle' | 'listening' | 'processing' | 'searching' | 'generating' | 'finished'
   const [transcript, setTranscript] = useState('');
   const [error, setError] = useState(null);
   
@@ -17,7 +19,7 @@ export const useVoiceAssistant = () => {
   });
 
   const recognitionRef = useRef(null);
-  const utteranceRef = useRef(null);
+  const lastSpokenTextRef = useRef('');
 
   // Initialize Speech Recognition on mount if supported
   useEffect(() => {
@@ -32,11 +34,13 @@ export const useVoiceAssistant = () => {
 
       recognition.onstart = () => {
         setIsListening(true);
+        setVoiceStatus('listening');
         setError(null);
-        // FEATURE 21: VOICE INTERRUPT - Stop any ongoing speech synthesis when user starts talking
+        // FEATURE 12: VOICE INTERRUPT - Stop any ongoing speech synthesis when user starts talking
         if (window.speechSynthesis && window.speechSynthesis.speaking) {
           window.speechSynthesis.cancel();
           setIsSpeaking(false);
+          setIsPaused(false);
         }
       };
 
@@ -51,10 +55,12 @@ export const useVoiceAssistant = () => {
       recognition.onerror = (event) => {
         console.warn('Speech recognition error:', event.error);
         setIsListening(false);
+        setVoiceStatus('idle');
+        setTranscript('');
         if (event.error === 'not-allowed') {
           setError('Microphone permission denied. Please allow microphone access.');
         } else {
-          setError("I couldn't hear you clearly. Please try again.");
+          setError("Sorry, I couldn't understand that.");
         }
       };
 
@@ -69,6 +75,40 @@ export const useVoiceAssistant = () => {
   }, []);
 
   /**
+   * Complete reset of all voice input states
+   */
+  const resetVoiceState = useCallback(() => {
+    if (recognitionRef.current) {
+      try {
+        recognitionRef.current.abort();
+      } catch (e) {
+        console.warn('Recognition abort error:', e);
+      }
+    }
+    setIsListening(false);
+    setVoiceStatus('idle');
+    setTranscript('');
+    setError(null);
+  }, []);
+
+  /**
+   * Cancel / Stop recording immediately without sending any query
+   */
+  const cancelListening = useCallback(() => {
+    if (recognitionRef.current) {
+      try {
+        recognitionRef.current.abort();
+      } catch (e) {
+        console.warn('Recognition cancel error:', e);
+      }
+    }
+    setIsListening(false);
+    setVoiceStatus('idle');
+    setTranscript('');
+    setError(null);
+  }, []);
+
+  /**
    * Start listening to voice input
    */
   const startListening = useCallback(() => {
@@ -80,10 +120,13 @@ export const useVoiceAssistant = () => {
     if (window.speechSynthesis) {
       window.speechSynthesis.cancel();
       setIsSpeaking(false);
+      setIsPaused(false);
     }
 
     setTranscript('');
     setError(null);
+    setVoiceStatus('listening');
+
     try {
       recognitionRef.current.start();
     } catch {
@@ -108,6 +151,7 @@ export const useVoiceAssistant = () => {
       }
     }
     setIsListening(false);
+    setVoiceStatus('processing');
   }, []);
 
   /**
@@ -117,11 +161,14 @@ export const useVoiceAssistant = () => {
     if (isMuted || !window.speechSynthesis) return;
 
     window.speechSynthesis.cancel();
+    setIsPaused(false);
+    lastSpokenTextRef.current = text;
 
     const cleanText = text
       .replace(/[*_#`~]/g, '')
       .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
       .replace(/•/g, '')
+      .replace(/✓/g, '')
       .replace(/\n+/g, '. ')
       .trim();
 
@@ -139,23 +186,57 @@ export const useVoiceAssistant = () => {
         utterance.voice = preferredVoice;
       }
 
-      utterance.onstart = () => setIsSpeaking(true);
+      utterance.onstart = () => {
+        setIsSpeaking(true);
+        setIsPaused(false);
+      };
       utterance.onend = () => {
         setIsSpeaking(false);
+        setIsPaused(false);
+        setVoiceStatus('finished');
         if (onEnd) onEnd();
       };
       utterance.onerror = (err) => {
         console.warn('Speech synthesis error:', err);
         setIsSpeaking(false);
+        setIsPaused(false);
       };
 
-      utteranceRef.current = utterance;
       window.speechSynthesis.speak(utterance);
     } catch (e) {
       console.warn('Speech synthesis failed:', e);
       setIsSpeaking(false);
     }
   }, [isMuted]);
+
+  /**
+   * Pause speech synthesis
+   */
+  const pauseSpeaking = useCallback(() => {
+    if (window.speechSynthesis && isSpeaking && !isPaused) {
+      window.speechSynthesis.pause();
+      setIsPaused(true);
+    }
+  }, [isSpeaking, isPaused]);
+
+  /**
+   * Resume speech synthesis
+   */
+  const resumeSpeaking = useCallback(() => {
+    if (window.speechSynthesis && isPaused) {
+      window.speechSynthesis.resume();
+      setIsPaused(false);
+    }
+  }, [isPaused]);
+
+  /**
+   * Replay last spoken text
+   */
+  const replaySpeaking = useCallback(() => {
+    if (lastSpokenTextRef.current) {
+      speak(lastSpokenTextRef.current);
+    }
+  }, [speak]);
 
   /**
    * Stop speech synthesis immediately
@@ -165,6 +246,7 @@ export const useVoiceAssistant = () => {
       window.speechSynthesis.cancel();
     }
     setIsSpeaking(false);
+    setIsPaused(false);
   }, []);
 
   /**
@@ -176,6 +258,7 @@ export const useVoiceAssistant = () => {
       if (next && window.speechSynthesis) {
         window.speechSynthesis.cancel();
         setIsSpeaking(false);
+        setIsPaused(false);
       }
       return next;
     });
@@ -185,14 +268,24 @@ export const useVoiceAssistant = () => {
     isSupported,
     isListening,
     isSpeaking,
+    isPaused,
     isMuted,
+    voiceStatus,
+    setVoiceStatus,
     transcript,
     error,
     startListening,
     stopListening,
+    cancelListening,
+    resetVoiceState,
     speak,
+    pauseSpeaking,
+    resumeSpeaking,
+    replaySpeaking,
     stopSpeaking,
     toggleMute,
     setTranscript
   };
 };
+
+

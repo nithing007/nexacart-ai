@@ -1,4 +1,4 @@
-import { X, Sparkles, RefreshCw, Volume2, VolumeX, Mic } from 'lucide-react';
+import { X, Sparkles, RefreshCw, Volume2, VolumeX, Mic, Loader2 } from 'lucide-react';
 
 const ChatHeader = ({
   onClose,
@@ -7,8 +7,46 @@ const ChatHeader = ({
   isMuted,
   onToggleMute,
   isSpeaking,
-  isListening
+  isListening,
+  thinkingStep,
+  voiceStatus
 }) => {
+  const renderStatusBadge = () => {
+    if (isListening || voiceStatus === 'listening') {
+      return (
+        <span className="flex items-center gap-1 text-[8px] text-amber-400 font-black uppercase tracking-wider animate-pulse">
+          <Mic className="w-2.5 h-2.5 animate-bounce" /> Listening...
+        </span>
+      );
+    }
+
+    if (thinkingStep) {
+      return (
+        <span className="flex items-center gap-1 text-[8px] text-emerald-300 font-black uppercase tracking-wider animate-pulse">
+          <Loader2 className="w-2.5 h-2.5 animate-spin" /> {thinkingStep}
+        </span>
+      );
+    }
+
+    if (isSpeaking) {
+      return (
+        <span className="flex items-center gap-1 text-[8px] text-emerald-400 font-black uppercase tracking-wider animate-pulse">
+          <Volume2 className="w-2.5 h-2.5" /> Speaking...
+        </span>
+      );
+    }
+
+    return (
+      <div className="flex items-center gap-1">
+        <span className="relative flex h-1.5 w-1.5">
+          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+          <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-400"></span>
+        </span>
+        <span className="text-[8px] text-emerald-400 font-extrabold uppercase tracking-wider">Online</span>
+      </div>
+    );
+  };
+
   return (
     <div className="flex items-center justify-between px-4.5 py-3.5 border-b border-emerald-900/30 bg-gradient-to-r from-emerald-950 via-green-950 to-neutral-950 text-white rounded-t-[2rem] shadow-sm relative overflow-hidden shrink-0">
       {/* Background Glow */}
@@ -39,23 +77,7 @@ const ChatHeader = ({
             </p>
             <span className="w-1 h-1 rounded-full bg-emerald-400/50"></span>
             <div className="flex items-center gap-1">
-              {isListening ? (
-                <span className="flex items-center gap-1 text-[8px] text-amber-400 font-black uppercase tracking-wider animate-pulse">
-                  <Mic className="w-2.5 h-2.5" /> Listening...
-                </span>
-              ) : isSpeaking ? (
-                <span className="flex items-center gap-1 text-[8px] text-emerald-400 font-black uppercase tracking-wider animate-pulse">
-                  <Volume2 className="w-2.5 h-2.5" /> Speaking...
-                </span>
-              ) : (
-                <div className="flex items-center gap-1">
-                  <span className="relative flex h-1.5 w-1.5">
-                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                    <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-400"></span>
-                  </span>
-                  <span className="text-[8px] text-emerald-400 font-extrabold uppercase tracking-wider">Online</span>
-                </div>
-              )}
+              {renderStatusBadge()}
             </div>
           </div>
         </div>
@@ -103,3 +125,4 @@ const ChatHeader = ({
 };
 
 export default ChatHeader;
+

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { Link, useSearchParams } from 'react-router-dom';
 import { fetchProducts } from '../redux/slices/productsSlice';
@@ -7,7 +7,8 @@ import { addToWishlist, removeFromWishlist } from '../redux/slices/wishlistSlice
 import { 
   Heart, ShoppingCart, Star, LayoutGrid, Cpu, 
   ShoppingBag, Shirt, Home, Watch, Dumbbell, BookOpen, 
-  Sparkles, Search, Menu, X 
+  Sparkles, Search, Menu, X, Smartphone, Laptop, Gamepad2, 
+  Armchair, Utensils
 } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { Card, CardContent } from '../components/ui/card';
@@ -16,6 +17,24 @@ import toast from 'react-hot-toast';
 import { motion, AnimatePresence } from 'framer-motion';
 import api from '../services/api';
 
+// Icon map for dynamically extracted category names
+const categoryIconMap = {
+  'All': LayoutGrid,
+  'Mobiles': Smartphone,
+  'Laptops': Laptop,
+  'Electronics': Cpu,
+  'Groceries': ShoppingBag,
+  'Fashion': Shirt,
+  'Home & Office': Home,
+  'Accessories': Watch,
+  'Gaming': Gamepad2,
+  'Furniture': Armchair,
+  'Kitchen': Utensils,
+  'Beauty': Sparkles,
+  'Sports': Dumbbell,
+  'Books': BookOpen
+};
+
 const Products = () => {
   const dispatch = useDispatch();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -23,53 +42,66 @@ const Products = () => {
   const { products: wishlistProducts } = useSelector((state) => state.wishlist);
   const { isAuthenticated } = useSelector((state) => state.auth);
 
-  // Filter States derived directly from URL parameters (avoids useEffect setState warning)
+  // Filter States derived directly from URL parameters
   const selectedCategory = searchParams.get('category') || 'All';
   const searchQuery = searchParams.get('search') || '';
   const [localSearchQuery, setLocalSearchQuery] = useState(searchQuery);
   const [prevSearchQuery, setPrevSearchQuery] = useState(searchQuery);
 
-  // Real Category counts state
+  // Real Category counts state fetched directly from MongoDB
   const [allProducts, setAllProducts] = useState([]);
 
-  // Fetch all products once to compute category item counts dynamically
+  // Fetch all products once to compute category item counts dynamically from MongoDB
   useEffect(() => {
     const loadAllProducts = async () => {
       try {
         const res = await api.get('/products');
         setAllProducts(res.data || []);
       } catch (err) {
-        console.warn('Failed to load category counts', err);
+        console.warn('Failed to load category counts from database', err);
       }
     };
     loadAllProducts();
   }, []);
 
+  // Dynamically extract unique categories and count exact products directly from MongoDB allProducts
+  const categoryDetails = useMemo(() => {
+    const uniqueCats = Array.from(new Set(allProducts.map((p) => p.category?.trim()).filter(Boolean)));
+    
+    // Sort category names alphabetically for clean presentation
+    uniqueCats.sort((a, b) => a.localeCompare(b));
+
+    const totalCount = allProducts.length;
+
+    return [
+      {
+        name: 'All',
+        label: 'All Products',
+        icon: LayoutGrid,
+        count: totalCount
+      },
+      ...uniqueCats.map((cat) => ({
+        name: cat,
+        label: cat,
+        icon: categoryIconMap[cat] || ShoppingBag,
+        count: allProducts.filter((p) => (p.category || '').trim() === cat).length
+      }))
+    ];
+  }, [allProducts]);
+
   const getCategoryCount = (categoryName) => {
     if (categoryName === 'All') {
       return allProducts.length;
     }
-    return allProducts.filter((p) => p.category === categoryName).length;
+    return allProducts.filter((p) => (p.category || '').trim() === categoryName).length;
   };
-
-  const categoryDetails = [
-    { name: 'All', label: 'All Products', icon: LayoutGrid, count: '4,500+ Items' },
-    { name: 'Electronics', label: 'Electronics', icon: Cpu, count: '1,240+ Items' },
-    { name: 'Groceries', label: 'Groceries', icon: ShoppingBag, count: '850+ Items' },
-    { name: 'Fashion', label: 'Fashion', icon: Shirt, count: '2,150+ Items' },
-    { name: 'Home & Office', label: 'Home & Office', icon: Home, count: '980+ Items' },
-    { name: 'Accessories', label: 'Accessories', icon: Watch, count: '620+ Items' },
-    { name: 'Sports', label: 'Sports', icon: Dumbbell, count: '450+ Items' },
-    { name: 'Books', label: 'Books', icon: BookOpen, count: '310+ Items' },
-    { name: 'Beauty', label: 'Beauty', icon: Sparkles, count: '740+ Items' },
-  ];
 
   // Derive previous and next category for navigation
   const currentIdx = categoryDetails.findIndex((cat) => cat.name === selectedCategory);
   const prevIdx = currentIdx <= 0 ? categoryDetails.length - 1 : currentIdx - 1;
   const nextIdx = currentIdx >= categoryDetails.length - 1 ? 0 : currentIdx + 1;
-  const prevCategory = categoryDetails[prevIdx];
-  const nextCategory = categoryDetails[nextIdx];
+  const prevCategory = categoryDetails[prevIdx] || categoryDetails[0];
+  const nextCategory = categoryDetails[nextIdx] || categoryDetails[0];
 
   // Sync local input with URL query parameter in the render phase
   if (searchQuery !== prevSearchQuery) {
@@ -148,8 +180,9 @@ const Products = () => {
     }
   };
 
-  // Products listing directly uses products (Max Price filter is removed)
+  // Products listing directly uses products
   const filteredProducts = products;
+  const selectedCategoryTotalCount = getCategoryCount(selectedCategory);
 
   // Category list JSX content to share between drawer and desktop layout
   const categoriesPanelContent = (
@@ -170,7 +203,7 @@ const Products = () => {
       </div>
 
       {/* Categories Cards List */}
-      <div className="space-y-2 max-h-[350px] overflow-y-auto pr-1 scrollbar-thin scrollbar-thumb-gray-200 scrollbar-track-transparent">
+      <div className="space-y-2 max-h-[380px] overflow-y-auto pr-1 scrollbar-thin scrollbar-thumb-gray-200 scrollbar-track-transparent">
         {categoryDetails.map((cat) => {
           const IconComponent = cat.icon;
           const isActive = selectedCategory === cat.name;
@@ -192,10 +225,10 @@ const Products = () => {
                 </div>
                 <span className="text-xs font-bold tracking-tight">{cat.label}</span>
               </div>
-              <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${
-                isActive ? 'bg-white/20 text-white' : 'bg-gray-100 text-gray-400'
+              <span className={`text-[10px] font-semibold px-2.5 py-0.5 rounded-full ${
+                isActive ? 'bg-white/20 text-white' : 'bg-emerald-50 text-emerald-700 font-extrabold border border-emerald-100/50'
               }`}>
-                {getCategoryCount(cat.name)} Items
+                {cat.count} Items
               </span>
             </button>
           );
@@ -204,12 +237,12 @@ const Products = () => {
 
       <hr className="border-gray-100" />
 
-      {/* Category Summary */}
+      {/* Dynamic Category Summary */}
       <div className="bg-gradient-to-tr from-emerald-50/50 to-green-50/50 border border-emerald-100/50 p-4 rounded-2xl space-y-2.5 text-left">
         <h4 className="text-[10px] font-black text-emerald-900 uppercase tracking-wider">Category Summary</h4>
         <div className="space-y-1 text-xs text-emerald-800">
           <p className="flex justify-between"><span className="text-gray-400">Category:</span> <span className="font-bold text-emerald-955">{selectedCategory}</span></p>
-          <p className="flex justify-between"><span className="text-gray-400">Products:</span> <span className="font-bold text-emerald-955">{filteredProducts.length}</span></p>
+          <p className="flex justify-between"><span className="text-gray-400">Products:</span> <span className="font-bold text-emerald-955">{selectedCategoryTotalCount}</span></p>
           <p className="flex justify-between"><span className="text-gray-400">Showing:</span> <span className="font-bold text-emerald-955">{filteredProducts.length} Products</span></p>
         </div>
       </div>
@@ -277,11 +310,17 @@ const Products = () => {
         {/* Header Block */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between bg-white p-6 rounded-3xl border border-gray-100 shadow-sm gap-4">
           <div className="space-y-1">
-            <h1 className="text-2xl font-black text-gray-900 tracking-tight">Browse Products</h1>
-            <p className="text-xs text-gray-400 font-semibold">Discover AI-curated shopping recommendations.</p>
+            <h1 className="text-2xl font-black text-gray-900 tracking-tight">
+              {selectedCategory === 'All' ? 'Browse All Products' : `${selectedCategory} Catalog`}
+            </h1>
+            <p className="text-xs text-gray-400 font-semibold">
+              {selectedCategory === 'All' 
+                ? `Exploring all ${allProducts.length} products in catalog.`
+                : `Showing ${filteredProducts.length} ${selectedCategory} products directly from database.`}
+            </p>
           </div>
           <div className="text-xs font-bold text-gray-500 bg-gray-50 px-3.5 py-2 rounded-xl border border-gray-100 shrink-0 text-center sm:text-right">
-            Showing <span className="text-emerald-600 font-black">{filteredProducts.length}</span> Products
+            Showing <span className="text-emerald-600 font-black">{filteredProducts.length}</span> {selectedCategory === 'All' ? 'Products' : `${selectedCategory} Products`}
           </div>
         </div>
 

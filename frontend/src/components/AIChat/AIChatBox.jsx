@@ -26,11 +26,18 @@ const AIChatBox = ({ onClose, containerHeight = "h-[500px]" }) => {
     isListening,
     isSpeaking,
     isMuted,
+    voiceStatus,
+    setVoiceStatus,
     transcript,
     error: voiceError,
     startListening,
     stopListening,
+    cancelListening,
+    resetVoiceState,
     speak,
+    pauseSpeaking,
+    resumeSpeaking,
+    replaySpeaking,
     stopSpeaking,
     toggleMute,
     setTranscript
@@ -44,13 +51,13 @@ const AIChatBox = ({ onClose, containerHeight = "h-[500px]" }) => {
         sender: 'assistant',
         text: `Hello ${name} 👋\n\nWelcome back to NexaCart AI.\nHow can I help you shop today?`,
         timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-        followUps: ["Gaming phone under ₹25,000", "Compare laptops", "Plan monthly budget", "Open Cart"]
+        followUps: ["Mobile phones under ₹20,000", "Compare gaming laptops", "Plan monthly budget", "Open Cart"]
       };
     }
     return {
       id: 'welcome',
       sender: 'assistant',
-      text: `Hello 👋\n\nI'm NexaCart AI, your personal shopping assistant.\nHow can I help you shop today?`,
+      text: `Hello 👋\n\nI'm NexaCart AI, your personal AI shopping copilot.\nHow can I help you shop today?`,
       timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
       followUps: ["Shopping advice", "Recommend smartphones", "Price comparisons", "Open Cart"]
     };
@@ -86,25 +93,26 @@ const AIChatBox = ({ onClose, containerHeight = "h-[500px]" }) => {
     return msg;
   });
 
-  // Auto-scroll chat container to bottom
-  const scrollToBottomInternal = () => {
+  // REQUIREMENT 6: Auto-scroll ONLY inner chat container without scrolling parent webpage
+  const scrollToBottomInternal = useCallback(() => {
     if (chatContainerRef.current) {
-      chatContainerRef.current.scrollTo({
-        top: chatContainerRef.current.scrollHeight,
+      const container = chatContainerRef.current;
+      container.scrollTo({
+        top: container.scrollHeight,
         behavior: 'smooth'
       });
     }
-  };
+  }, []);
 
   useEffect(() => {
     scrollToBottomInternal();
-  }, [messages, isLoading, thinkingStep]);
+  }, [messages, isLoading, thinkingStep, scrollToBottomInternal]);
 
   // Main Handler for sending user messages & progressive response streaming
   const handleSendMessage = useCallback(async (text) => {
     if (!text || !text.trim() || isLoading) return;
 
-    // Feature 21: Interrupt TTS if user sends new message
+    // Interrupt TTS if user sends new message
     stopSpeaking();
 
     const userMsgId = Date.now().toString();
@@ -120,26 +128,46 @@ const AIChatBox = ({ onClose, containerHeight = "h-[500px]" }) => {
     setMessages(prev => [...prev, newUserMessage]);
     setIsLoading(true);
 
-    // Feature 16: AI Thinking State Progressive Steps
-    setThinkingStep('Understanding request...');
-    const stepTimer1 = setTimeout(() => setThinkingStep('Searching catalog...'), 300);
-    const stepTimer2 = setTimeout(() => setThinkingStep('Analyzing products...'), 600);
-    const stepTimer3 = setTimeout(() => setThinkingStep('Generating response...'), 900);
+    // REQUIREMENT 5: Voice / Text Loading States Progressive Pipeline
+    // 🧠 Understanding your request... -> 🔍 Searching products... -> 🤖 Generating recommendations... -> ✅ Finished
+    setThinkingStep('🧠 Understanding your request...');
+    setVoiceStatus('processing');
+    const stepTimer1 = setTimeout(() => {
+      setThinkingStep('🔍 Searching products...');
+      setVoiceStatus('searching');
+    }, 350);
+    const stepTimer2 = setTimeout(() => {
+      setThinkingStep('🤖 Generating recommendations...');
+      setVoiceStatus('generating');
+    }, 700);
 
     try {
+      // Handle Smart Fallback Action Button Clicks
+      let actualQueryToProcess = text;
+      if (text === 'Show Alternatives' && contextMemory.lastQuery) {
+        actualQueryToProcess = `Show alternative ${contextMemory.category || 'products'} for ${contextMemory.lastQuery}`;
+      } else if (text === 'Change Budget') {
+        actualQueryToProcess = `What budget range would you recommend?`;
+      } else if (text === 'Modify Specs') {
+        actualQueryToProcess = `Which specifications should I adjust?`;
+      }
+
       // Process User Message through Intent Classifier & Conversation Engine
       const response = await processUserMessage(
-        text,
+        actualQueryToProcess,
         contextMemory,
         { user, cart, wishlist, orders }
       );
 
       clearTimeout(stepTimer1);
       clearTimeout(stepTimer2);
-      clearTimeout(stepTimer3);
-      setThinkingStep('');
+      setThinkingStep('✅ Finished');
+      setVoiceStatus('finished');
 
-      // Feature 15: Voice / Text Navigation Dispatch
+      // Reset thinking step to empty after brief display
+      setTimeout(() => setThinkingStep(''), 500);
+
+      // Voice / Text Navigation Dispatch
       if (response.action === 'NAVIGATE' && response.targetPath) {
         toast.success(`Navigating to ${response.targetPath}...`, { icon: '🚀' });
         navigate(response.targetPath);
@@ -150,7 +178,7 @@ const AIChatBox = ({ onClose, containerHeight = "h-[500px]" }) => {
         setContextMemory(response.memory);
       }
 
-      // Feature 18: Streamed / Progressive Character Response Rendering
+      // Streamed / Progressive Character Response Rendering
       const assistantMsgId = (Date.now() + 1).toString();
       const fullText = response.text || '';
       
@@ -160,7 +188,8 @@ const AIChatBox = ({ onClose, containerHeight = "h-[500px]" }) => {
         text: '',
         reasoning: response.reasoning,
         recommendations: response.recommendations,
-        products: response.products || [],
+        isSmartFallback: response.isSmartFallback,
+        products: response.isSmartFallback ? (response.fallbackOptions || []) : (response.products || []),
         followUps: response.followUps || [],
         intent: response.intent,
         timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
@@ -182,26 +211,26 @@ const AIChatBox = ({ onClose, containerHeight = "h-[500px]" }) => {
         if (charIdx >= fullText.length) {
           clearInterval(streamInterval);
           setMessages(prev => prev.map(m => m.id === assistantMsgId ? { ...m, text: fullText } : m));
+          setVoiceStatus('idle');
           
-          // Feature 12: Read Response Aloud via Speech Synthesis
+          // Read Response Aloud via Speech Synthesis if unmuted
           if (!isMuted) {
             speak(fullText);
           }
         }
-      }, 25);
+      }, 20);
 
     } catch (err) {
       clearTimeout(stepTimer1);
       clearTimeout(stepTimer2);
-      clearTimeout(stepTimer3);
       setThinkingStep('');
+      setVoiceStatus('idle');
       console.error('Unhandled AI chat error:', err);
       
-      // Feature 23: Friendly Error Handling
       const assistantMessage = {
         id: (Date.now() + 1).toString(),
         sender: 'assistant',
-        text: "I'm having trouble connecting right now. Please try again.",
+        text: "Sorry, I couldn't understand that. Please try again.",
         products: [],
         followUps: ["Try again", "Browse shop"],
         timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
@@ -210,7 +239,7 @@ const AIChatBox = ({ onClose, containerHeight = "h-[500px]" }) => {
       setMessages(prev => [...prev, assistantMessage]);
       setIsLoading(false);
     }
-  }, [isLoading, stopSpeaking, contextMemory, user, cart, wishlist, orders, navigate, isMuted, speak]);
+  }, [isLoading, stopSpeaking, setVoiceStatus, contextMemory, user, cart, wishlist, orders, navigate, isMuted, speak]);
 
   // Handle Voice Input Transcript Submission automatically when voice recognition stops
   useEffect(() => {
@@ -224,6 +253,7 @@ const AIChatBox = ({ onClose, containerHeight = "h-[500px]" }) => {
 
   const clearChat = () => {
     stopSpeaking();
+    resetVoiceState();
     setMessages([buildWelcomeMessage(firstName)]);
     setContextMemory({
       subject: '',
@@ -253,6 +283,8 @@ const AIChatBox = ({ onClose, containerHeight = "h-[500px]" }) => {
         onToggleMute={toggleMute}
         isSpeaking={isSpeaking}
         isListening={isListening}
+        thinkingStep={thinkingStep}
+        voiceStatus={voiceStatus}
       />
 
       {/* Internal Scrollable Message Container */}
@@ -266,6 +298,9 @@ const AIChatBox = ({ onClose, containerHeight = "h-[500px]" }) => {
             message={msg}
             onFollowUpClick={handleSendMessage}
             onSpeakMessage={speak}
+            onPauseSpeak={pauseSpeaking}
+            onResumeSpeak={resumeSpeaking}
+            onReplaySpeak={replaySpeaking}
           />
         ))}
 
@@ -276,7 +311,7 @@ const AIChatBox = ({ onClose, containerHeight = "h-[500px]" }) => {
           </div>
         )}
 
-        {/* Feature 16 & 17: Animated AI Thinking State & Steps */}
+        {/* Animated AI Thinking State & Steps */}
         {isLoading && (
           <div className="flex gap-2.5 items-start w-full animate-in fade-in duration-200">
             <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-emerald-700 to-green-600 text-white flex items-center justify-center text-xs shrink-0 select-none shadow-md border border-emerald-400/20 mt-0.5">
@@ -284,7 +319,7 @@ const AIChatBox = ({ onClose, containerHeight = "h-[500px]" }) => {
             </div>
             <div className="bg-white/95 border border-emerald-900/10 rounded-2xl rounded-tl-none px-4 py-3 shadow-md text-xs text-gray-700 max-w-[80%] flex items-center gap-2">
               <span className="font-semibold text-emerald-800 text-[11px]">
-                {thinkingStep || 'NexaCart AI is thinking'}
+                {thinkingStep || '🧠 Understanding your request...'}
               </span>
               <div className="flex items-center gap-1">
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-bounce" style={{ animationDelay: '0ms' }}></span>
@@ -300,7 +335,7 @@ const AIChatBox = ({ onClose, containerHeight = "h-[500px]" }) => {
           <div className="flex justify-center my-2">
             <div className="bg-gradient-to-r from-amber-500 to-orange-500 text-black text-xs font-black px-4 py-2 rounded-full shadow-lg flex items-center gap-2 animate-bounce">
               <Mic className="w-4 h-4 animate-pulse" />
-              <span>Listening to voice... Speak now!</span>
+              <span>🎤 Listening to voice... Speak now!</span>
             </div>
           </div>
         )}
@@ -328,6 +363,7 @@ const AIChatBox = ({ onClose, containerHeight = "h-[500px]" }) => {
           isListening={isListening}
           startListening={startListening}
           stopListening={stopListening}
+          cancelListening={cancelListening}
           transcript={transcript}
           voiceError={voiceError}
           isSupported={isSupported}
@@ -338,3 +374,4 @@ const AIChatBox = ({ onClose, containerHeight = "h-[500px]" }) => {
 };
 
 export default AIChatBox;
+

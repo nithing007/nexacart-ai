@@ -37,6 +37,30 @@ export const fetchOrderDetails = createAsyncThunk(
   }
 );
 
+export const cancelOrderThunk = createAsyncThunk(
+  'orders/cancelOrder',
+  async ({ orderId, reason }, { rejectWithValue }) => {
+    try {
+      const response = await api.put(`/orders/${orderId}/cancel`, { reason });
+      return response.data;
+    } catch (error) {
+      return rejectWithValue(error.response?.data?.message || 'Failed to cancel order');
+    }
+  }
+);
+
+export const requestReturnThunk = createAsyncThunk(
+  'orders/requestReturn',
+  async ({ orderId, reason }, { rejectWithValue }) => {
+    try {
+      const response = await api.put(`/orders/${orderId}/return`, { reason });
+      return response.data;
+    } catch (error) {
+      return rejectWithValue(error.response?.data?.message || 'Failed to submit return request');
+    }
+  }
+);
+
 const initialState = {
   orders: [],
   orderDetails: null,
@@ -99,6 +123,22 @@ const ordersSlice = createSlice({
       .addCase(fetchOrderDetails.rejected, (state, action) => {
         state.loading = false;
         state.error = action.payload;
+      })
+      // Cancel Order
+      .addCase(cancelOrderThunk.fulfilled, (state, action) => {
+        const updated = action.payload;
+        state.orders = state.orders.map(o => o._id === updated._id ? updated : o);
+        if (state.orderDetails && state.orderDetails._id === updated._id) {
+          state.orderDetails = updated;
+        }
+      })
+      // Return Request
+      .addCase(requestReturnThunk.fulfilled, (state, action) => {
+        const updated = action.payload;
+        state.orders = state.orders.map(o => o._id === updated._id ? updated : o);
+        if (state.orderDetails && state.orderDetails._id === updated._id) {
+          state.orderDetails = updated;
+        }
       });
   },
 });

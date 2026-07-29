@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Send, Mic, MicOff } from 'lucide-react';
+import { Send, Mic, MicOff, Square } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 const ChatInput = ({
@@ -8,6 +8,7 @@ const ChatInput = ({
   isListening,
   startListening,
   stopListening,
+  cancelListening,
   transcript,
   voiceError,
   isSupported
@@ -17,24 +18,39 @@ const ChatInput = ({
   // Synchronize input field text with live voice transcript
   useEffect(() => {
     if (transcript) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      setText(transcript);
+      setTimeout(() => setText(transcript), 0);
     }
   }, [transcript]);
 
   // Show voice errors if mic recognition encounters issue
   useEffect(() => {
     if (voiceError) {
+      setTimeout(() => setText(''), 0);
       toast.error(voiceError, { id: 'voice-err' });
     }
   }, [voiceError]);
 
   const handleSubmit = (e) => {
-    e.preventDefault();
-    if (!text.trim() || disabled) return;
-    if (isListening) stopListening();
-    onSendMessage(text.trim());
+    if (e) e.preventDefault();
+    const toSend = text.trim();
+    if (!toSend || disabled) return;
+    
+    // Clear input field text IMMEDIATELY upon submission (REQUIREMENT 1)
     setText('');
+    if (isListening && stopListening) stopListening();
+    
+    onSendMessage(toSend);
+  };
+
+  const handleCancelRecording = (e) => {
+    if (e) e.preventDefault();
+    setText('');
+    if (cancelListening) {
+      cancelListening();
+    } else if (stopListening) {
+      stopListening();
+    }
+    toast('Recording cancelled', { icon: '🛑' });
   };
 
   const handleMicClick = () => {
@@ -44,8 +60,9 @@ const ChatInput = ({
     }
 
     if (isListening) {
-      stopListening();
+      handleCancelRecording();
     } else {
+      setText('');
       startListening();
       toast('Listening... Speak your shopping request now!', { icon: '🎙️' });
     }
@@ -53,11 +70,21 @@ const ChatInput = ({
 
   return (
     <form onSubmit={handleSubmit} className="flex items-center gap-2 relative">
-      {/* Listening Status Overlay */}
+      {/* REQUIREMENT 1, 3, 5: Live Voice Status & Interrupt Controls */}
       {isListening && (
-        <div className="absolute -top-7 left-2 flex items-center gap-1.5 text-[10px] font-extrabold text-amber-400 bg-black/80 px-2.5 py-0.5 rounded-full border border-amber-500/30 animate-pulse z-20">
-          <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-ping" />
-          Listening... Speak now (Say "Gaming phone" or "Open Cart")
+        <div className="absolute -top-8 left-2 flex items-center justify-between text-[10px] font-extrabold text-amber-400 bg-black/90 px-3 py-1 rounded-full border border-amber-500/40 shadow-lg z-20 w-[95%] animate-pulse">
+          <div className="flex items-center gap-1.5">
+            <span className="w-2 h-2 rounded-full bg-amber-400 animate-ping" />
+            <span>Listening... Speak now</span>
+          </div>
+          <button
+            type="button"
+            onClick={handleCancelRecording}
+            className="text-[9px] uppercase tracking-wider font-extrabold text-rose-400 hover:text-rose-300 flex items-center gap-1 bg-rose-950/60 px-2 py-0.5 rounded-full border border-rose-500/30"
+            title="Stop recording and discard"
+          >
+            <Square className="w-2.5 h-2.5 fill-rose-400" /> Stop
+          </button>
         </div>
       )}
 
@@ -87,7 +114,7 @@ const ChatInput = ({
               ? 'bg-amber-500 text-black animate-pulse shadow-md scale-110'
               : 'text-gray-400 hover:text-emerald-400 hover:bg-white/5 disabled:opacity-40'
           }`}
-          title={isListening ? "Stop listening" : "Start voice shopping"}
+          title={isListening ? "Stop recording" : "Start voice shopping"}
         >
           {isListening ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
         </button>
@@ -107,3 +134,5 @@ const ChatInput = ({
 };
 
 export default ChatInput;
+
+

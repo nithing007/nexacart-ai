@@ -31,6 +31,85 @@ export const INTENT_TYPES = {
 };
 
 /**
+ * Standard Product Categories
+ */
+export const CATEGORY_TYPES = {
+  MOBILE_PHONES: 'Mobile Phones',
+  LAPTOPS: 'Laptops',
+  HEADPHONES: 'Headphones & Audio',
+  TELEVISIONS: 'Televisions & Display',
+  FASHION: 'Fashion & Apparel',
+  GROCERIES: 'Groceries & Pantry',
+  FURNITURE: 'Home & Office',
+  ACCESSORIES: 'Accessories',
+  ELECTRONICS: 'Electronics'
+};
+
+/**
+ * Misspelling & Typo Correction Dictionary
+ */
+export const BRAND_TYPO_MAP = {
+  'samung': 'SAMSUNG',
+  'samsng': 'SAMSUNG',
+  'aple': 'APPLE',
+  'appele': 'APPLE',
+  'iphone': 'APPLE',
+  'mediateck': 'MEDIATEK',
+  'mediatek': 'MEDIATEK',
+  'dimensity': 'MEDIATEK',
+  'snapdagon': 'SNAPDRAGON',
+  'snadragon': 'SNAPDRAGON',
+  'reame': 'REALME',
+  'relme': 'REALME',
+  'onepluse': 'ONEPLUS',
+  'one plus': 'ONEPLUS',
+  'xiaomy': 'XIAOMI',
+  'redmi': 'XIAOMI',
+  'poko': 'POCO',
+  'asus': 'ASUS',
+  'lenvo': 'LENOVO',
+  'hp': 'HP',
+  'dell': 'DELL',
+  'acer': 'ACER',
+  'sonny': 'SONY',
+  'nik': 'NIKE',
+  'adida': 'ADIDAS'
+};
+
+/**
+ * Detect product category from query string
+ */
+export const detectCategoryFromQuery = (query = '') => {
+  const lower = query.toLowerCase();
+
+  if (lower.includes('phone') || lower.includes('mobile') || lower.includes('smartphone') || lower.includes('iphone') || lower.includes('galaxy')) {
+    return CATEGORY_TYPES.MOBILE_PHONES;
+  }
+  if (lower.includes('laptop') || lower.includes('macbook') || lower.includes('chromebook') || lower.includes('notebook')) {
+    return CATEGORY_TYPES.LAPTOPS;
+  }
+  if (lower.includes('headphone') || lower.includes('earphone') || lower.includes('earbud') || lower.includes('airpods') || lower.includes('audio')) {
+    return CATEGORY_TYPES.HEADPHONES;
+  }
+  if (lower.includes('tv') || lower.includes('television') || lower.includes('monitor') || lower.includes('display screen')) {
+    return CATEGORY_TYPES.TELEVISIONS;
+  }
+  if (lower.includes('shoe') || lower.includes('sneaker') || lower.includes('jacket') || lower.includes('t-shirt') || lower.includes('clothing') || lower.includes('fashion')) {
+    return CATEGORY_TYPES.FASHION;
+  }
+  if (lower.includes('grocer') || lower.includes('food') || lower.includes('fruit') || lower.includes('milk') || lower.includes('avocado')) {
+    return CATEGORY_TYPES.GROCERIES;
+  }
+  if (lower.includes('chair') || lower.includes('desk') || lower.includes('table') || lower.includes('lamp') || lower.includes('furniture')) {
+    return CATEGORY_TYPES.FURNITURE;
+  }
+  if (lower.includes('charger') || lower.includes('case') || lower.includes('cover') || lower.includes('cable') || lower.includes('accessory')) {
+    return CATEGORY_TYPES.ACCESSORIES;
+  }
+  return null;
+};
+
+/**
  * Classifies a user message string into one of the 12 intent types.
  */
 export const classifyIntent = (message = '') => {
@@ -40,13 +119,15 @@ export const classifyIntent = (message = '') => {
   if (!text) {
     return {
       intent: INTENT_TYPES.GREETING,
+      category: null,
       isAmbiguousShopping: false,
       confidence: 1.0,
     };
   }
 
+  const detectedCategory = detectCategoryFromQuery(text);
+
   // 1. NAVIGATION INTENT
-  // Voice & text commands to switch pages ("open cart", "go to wishlist", "open profile", "track my orders", "open budget assistant", "open shop")
   const navigationRules = [
     { target: '/cart', keywords: ['open cart', 'go to cart', 'view cart', 'show cart', 'open my cart'] },
     { target: '/wishlist', keywords: ['open wishlist', 'go to wishlist', 'view wishlist', 'show wishlist', 'open my wishlist'] },
@@ -61,6 +142,7 @@ export const classifyIntent = (message = '') => {
       return {
         intent: INTENT_TYPES.NAVIGATION,
         targetPath: nav.target,
+        category: detectedCategory,
         isAmbiguousShopping: false,
         confidence: 0.98,
       };
@@ -68,18 +150,17 @@ export const classifyIntent = (message = '') => {
   }
 
   // 2. GREETING INTENT
-  // Examples: Hello, Hi, Hey, Good morning, Namaste, Yo
   const greetingRegex = /^(hi|hello|hey|good\s*(morning|afternoon|evening|day)|greetings|namaste|yo|hola)\b[!.\s]*$/i;
   if (greetingRegex.test(lower)) {
     return {
       intent: INTENT_TYPES.GREETING,
+      category: null,
       isAmbiguousShopping: false,
       confidence: 0.98,
     };
   }
 
-  // 3. GENERAL CONVERSATION INTENT (Identity, Persona, Greeting Follow-ups)
-  // Examples: What is your name?, Who created you?, Who made you?, How are you?, Thank you, Bye
+  // 3. GENERAL CONVERSATION INTENT
   const identityKeywords = [
     'what is your name', "what's your name", 'who are you', 'who created you', 'who made you',
     'how are you', 'thank you', 'thanks', 'bye', 'goodbye', 'can you help me', 'good job',
@@ -88,6 +169,7 @@ export const classifyIntent = (message = '') => {
   if (identityKeywords.some((k) => lower.includes(k))) {
     return {
       intent: INTENT_TYPES.GENERAL_CONVERSATION,
+      category: null,
       isAmbiguousShopping: false,
       confidence: 0.96,
     };
@@ -98,6 +180,7 @@ export const classifyIntent = (message = '') => {
     return {
       intent: INTENT_TYPES.CART,
       targetPath: '/cart',
+      category: null,
       isAmbiguousShopping: false,
       confidence: 0.95,
     };
@@ -108,6 +191,7 @@ export const classifyIntent = (message = '') => {
     return {
       intent: INTENT_TYPES.WISHLIST,
       targetPath: '/wishlist',
+      category: null,
       isAmbiguousShopping: false,
       confidence: 0.95,
     };
@@ -118,24 +202,24 @@ export const classifyIntent = (message = '') => {
     return {
       intent: INTENT_TYPES.ORDER_TRACKING,
       targetPath: '/orders',
+      category: null,
       isAmbiguousShopping: false,
       confidence: 0.95,
     };
   }
 
   // 7. PRODUCT COMPARISON INTENT
-  // Examples: Compare Samsung S24 and iPhone 15, Dell vs Lenovo, ASUS vs Acer, Compare laptops
   const comparisonKeywords = ['compare', ' vs ', ' versus ', 'difference between samsung', 'difference between iphone'];
   if (comparisonKeywords.some((k) => lower.includes(k)) && !lower.includes('ssd and hdd') && !lower.includes('ips and oled')) {
     return {
       intent: INTENT_TYPES.PRODUCT_COMPARISON,
+      category: detectedCategory,
       isAmbiguousShopping: false,
       confidence: 0.95,
     };
   }
 
   // 8. SHOPPING ADVICE INTENT
-  // Examples: Which processor is better for gaming?, Difference between IPS and OLED?, Is 8GB RAM enough?, Explain Snapdragon vs MediaTek
   const shoppingAdviceKeywords = [
     'which processor is better', 'is 8gb ram enough', 'is 16gb ram enough', 'snapdragon vs mediatek',
     'which display is better', 'gaming laptop buying guide', 'which phone should i buy', 'shopping advice',
@@ -144,13 +228,13 @@ export const classifyIntent = (message = '') => {
   if (shoppingAdviceKeywords.some((k) => lower.includes(k))) {
     return {
       intent: INTENT_TYPES.SHOPPING_ADVICE,
+      category: detectedCategory,
       isAmbiguousShopping: false,
       confidence: 0.94,
     };
   }
 
   // 9. PRODUCT EXPLANATION INTENT
-  // Examples: Explain OLED display, What is OLED?, Explain refresh rate, What is NVMe SSD?, Explain AMOLED
   const explanationKeywords = [
     'explain oled', 'explain lcd', 'explain led', 'explain amoled', 'explain refresh rate',
     'explain ram', 'explain nvme', 'explain processor', 'explain resolution', 'explain 4k'
@@ -158,13 +242,13 @@ export const classifyIntent = (message = '') => {
   if (explanationKeywords.some((k) => lower.includes(k))) {
     return {
       intent: INTENT_TYPES.PRODUCT_EXPLANATION,
+      category: detectedCategory,
       isAmbiguousShopping: false,
       confidence: 0.93,
     };
   }
 
   // 10. BUDGET PLANNING INTENT
-  // Examples: I have ₹50,000, Build me a PC, Need grocery list under ₹2000, Set budget
   const budgetKeywords = [
     'build me a pc', 'build a pc', 'grocery list under', 'budget assistant', 'allocate budget',
     'i have ₹', 'i have rs', 'my budget is', 'budget of ₹', 'budget of rs'
@@ -172,13 +256,13 @@ export const classifyIntent = (message = '') => {
   if (budgetKeywords.some((k) => lower.includes(k))) {
     return {
       intent: INTENT_TYPES.BUDGET_PLANNING,
+      category: detectedCategory,
       isAmbiguousShopping: false,
       confidence: 0.92,
     };
   }
 
   // 11. GENERAL KNOWLEDGE INTENT
-  // Examples: What is artificial intelligence?, What is chatgpt?, Tell me a joke, What is gravity?
   const gkKeywords = [
     'what is artificial intelligence', 'what is ai', 'what is chatgpt', 'what is gemini',
     'tell me a joke', 'who is the president', 'what is gravity', 'how does internet work'
@@ -186,19 +270,19 @@ export const classifyIntent = (message = '') => {
   if (gkKeywords.some((k) => lower.includes(k))) {
     return {
       intent: INTENT_TYPES.GENERAL_KNOWLEDGE,
+      category: null,
       isAmbiguousShopping: false,
       confidence: 0.90,
     };
   }
 
   // 12. PRODUCT SEARCH INTENT & AMBIGUITY CHECK
-  // Examples: Gaming phone under ₹25,000 with 8GB RAM, Show gaming laptops, Only ASUS, Under ₹80,000, Recommend headphones
   const shoppingKeywords = [
     'laptop', 'phone', 'mobile', 'smartphone', 'shoe', 'sneaker', 'grocer', 'headphone', 'earbud',
     'audio', 'tv', 'television', 'watch', 'smartwatch', 'washing machine', 'refrigerator', 'chair',
     'desk', 'lamp', 'bottle', 'backpack', 'jacket', 't-shirt', 'clothing', 'fashion', 'camera',
     'buy', 'shop', 'find', 'recommend', 'search', 'under ₹', 'under rs', 'under ', 'below ', 'only ',
-    'show me', 'looking for'
+    'show me', 'looking for', 'ram', 'storage', 'mediatek', 'snapdragon'
   ];
 
   const containsShoppingKeyword = shoppingKeywords.some((k) => lower.includes(k));
@@ -217,23 +301,18 @@ export const classifyIntent = (message = '') => {
   if (containsShoppingKeyword || isAmbiguous) {
     return {
       intent: INTENT_TYPES.PRODUCT_SEARCH,
+      category: detectedCategory,
       isAmbiguousShopping: isAmbiguous,
-      confidence: 0.90,
+      confidence: isAmbiguous ? 0.65 : 0.92,
     };
   }
 
-  // Default fallback for question-structured queries
-  if (lower.startsWith('what') || lower.startsWith('how') || lower.startsWith('why') || lower.startsWith('can')) {
-    return {
-      intent: INTENT_TYPES.GENERAL_CONVERSATION,
-      isAmbiguousShopping: false,
-      confidence: 0.70,
-    };
-  }
-
+  // Default fallback
   return {
     intent: INTENT_TYPES.PRODUCT_SEARCH,
+    category: detectedCategory,
     isAmbiguousShopping: true,
     confidence: 0.60,
   };
 };
+

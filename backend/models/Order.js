@@ -27,7 +27,26 @@ const orderSchema = new mongoose.Schema({
   paidAt: { type: Date },
   isDelivered: { type: Boolean, required: true, default: false },
   deliveredAt: { type: Date },
-  status: { type: String, required: true, enum: ['Pending', 'Processing', 'Shipped', 'Delivered', 'Cancelled'], default: 'Pending' }
+  status: { 
+    type: String, 
+    required: true, 
+    enum: ['Pending', 'Confirmed', 'Packed', 'Ready for Shipment', 'Shipped', 'In Transit', 'Out for Delivery', 'Delivered', 'Cancelled', 'Returned', 'Refunded'], 
+    default: 'Pending' 
+  },
+  deliveryPartner: { type: String, default: 'Delhivery' },
+  trackingNumber: { type: String, default: '' },
+  expectedDeliveryDate: { type: Date },
+  estimatedDeliveryTime: { type: String, default: '2:00 PM – 7:00 PM' },
+  cancellationReason: { type: String, default: '' },
+  returnReason: { type: String, default: '' },
+  returnStatus: { type: String, enum: ['None', 'Requested', 'Approved', 'Rejected', 'Completed'], default: 'None' },
+  timeline: [
+    {
+      status: { type: String, required: true },
+      timestamp: { type: Date, default: Date.now },
+      description: { type: String }
+    }
+  ]
 }, { timestamps: true });
 
 const Order = mongoose.model('Order', orderSchema);

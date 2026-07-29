@@ -65,7 +65,7 @@ const getSmartSearchResults = async (query, allProducts) => {
     }
   }
 
-  // Local fallback logic
+  // Local fallback logic grounded in category
   const localFallback = () => {
     let maxPrice = Infinity;
     const priceMatch = lowerQuery.match(/(?:under|below|less than|max|budget of)\s*₹?\s*(\d+)/i) 
@@ -75,35 +75,32 @@ const getSmartSearchResults = async (query, allProducts) => {
       maxPrice = Number(priceMatch[1]);
     }
 
-    let matchedCategory = '';
-    if (lowerQuery.includes('phone') || lowerQuery.includes('mobile') || lowerQuery.includes('iphone') || lowerQuery.includes('samsung')) {
-      matchedCategory = 'Electronics';
-    } else if (lowerQuery.includes('headphone') || lowerQuery.includes('earbud') || lowerQuery.includes('audio') || lowerQuery.includes('sony')) {
-      matchedCategory = 'Electronics';
+    let detectedSubject = '';
+    if (lowerQuery.includes('phone') || lowerQuery.includes('mobile') || lowerQuery.includes('iphone') || lowerQuery.includes('samsung') || lowerQuery.includes('realme') || lowerQuery.includes('poco')) {
+      detectedSubject = 'phone';
     } else if (lowerQuery.includes('laptop') || lowerQuery.includes('macbook') || lowerQuery.includes('computer')) {
-      matchedCategory = 'Electronics';
-    } else if (lowerQuery.includes('avocado') || lowerQuery.includes('blueberry') || lowerQuery.includes('milk') || lowerQuery.includes('tea') || lowerQuery.includes('grocery') || lowerQuery.includes('food') || lowerQuery.includes('fruit')) {
-      matchedCategory = 'Groceries';
-    } else if (lowerQuery.includes('chair') || lowerQuery.includes('desk') || lowerQuery.includes('lamp') || lowerQuery.includes('water bottle') || lowerQuery.includes('coffee') || lowerQuery.includes('notebook')) {
-      matchedCategory = 'Home & Office';
-    } else if (lowerQuery.includes('sneaker') || lowerQuery.includes('shoe') || lowerQuery.includes('backpack') || lowerQuery.includes('jacket') || lowerQuery.includes('t-shirt') || lowerQuery.includes('sun glass') || lowerQuery.includes('fashion') || lowerQuery.includes('clothing')) {
-      matchedCategory = 'Fashion';
+      detectedSubject = 'laptop';
+    } else if (lowerQuery.includes('headphone') || lowerQuery.includes('earbud') || lowerQuery.includes('audio') || lowerQuery.includes('sony')) {
+      detectedSubject = 'headphone';
+    } else if (lowerQuery.includes('grocer') || lowerQuery.includes('avocado') || lowerQuery.includes('food') || lowerQuery.includes('fruit')) {
+      detectedSubject = 'groceries';
+    } else if (lowerQuery.includes('shoe') || lowerQuery.includes('sneaker') || lowerQuery.includes('jacket') || lowerQuery.includes('fashion')) {
+      detectedSubject = 'fashion';
     }
 
-    let matches = [];
-    if (matchedCategory) {
-      matches = allProducts.filter(p => p.category === matchedCategory && p.price <= maxPrice);
-    } else {
-      matches = allProducts.filter(p => {
-        const nameMatch = p.name.toLowerCase().includes(lowerQuery);
-        const descMatch = p.description.toLowerCase().includes(lowerQuery);
-        return (nameMatch || descMatch) && p.price <= maxPrice;
-      });
-    }
-
-    if (matches.length === 0) {
-      matches = allProducts.filter(p => p.price <= maxPrice).slice(0, 5);
-    }
+    let matches = allProducts.filter(p => {
+      const pName = p.name.toLowerCase();
+      const pDesc = (p.description || '').toLowerCase();
+      
+      if (detectedSubject === 'phone') {
+        if (!pName.includes('phone') && !pName.includes('mobile') && !pName.includes('iphone') && !pName.includes('galaxy') && !pName.includes('smartphone')) return false;
+      } else if (detectedSubject === 'laptop') {
+        if (!pName.includes('laptop') && !pName.includes('macbook')) return false;
+      }
+      
+      if (p.price > maxPrice) return false;
+      return true;
+    });
 
     matches = [...matches].sort((a, b) => b.rating - a.rating).slice(0, 5);
 
@@ -112,8 +109,10 @@ const getSmartSearchResults = async (query, allProducts) => {
 
     return {
       productIds,
-      reasoning: `[Local Fallback] I searched our catalog for products matching "${query}" and found these top choices: ${matchedNames || 'no exact matches'}. These fit your pricing and keyword constraints.`,
-      recommendations: `If you are looking for alternatives, you can check out items in the same categories, which offer great values.`
+      reasoning: matches.length > 0 
+        ? `Found ${matches.length} catalog matches fitting your request for "${query}": ${matchedNames}. All selected items satisfy price and specification boundaries.`
+        : `No matching items found in our catalog for "${query}". Please consider expanding budget or adjusting spec requirements.`,
+      recommendations: `Only items currently in stock within the matching category are presented.`
     };
   };
 
@@ -125,22 +124,28 @@ const getSmartSearchResults = async (query, allProducts) => {
     const serializedProducts = allProducts.map(p => ({
       id: p._id.toString(),
       name: p.name,
+      description: p.description,
       price: p.price,
       originalPrice: p.originalPrice,
       category: p.category,
       rating: p.rating
     }));
 
-    const prompt = `You are a smart shopping assistant. The user wants to search our catalog using natural language: "${query}".
-Here is the available products JSON catalog:
+    const prompt = `You are a ChatGPT-style AI Shopping Copilot for NexaCart. The user wants to search our catalog: "${query}".
+Here is the available catalog JSON:
 ${JSON.stringify(serializedProducts)}
 
-Determine the best matching products (up to 5) that satisfy the user's search query, including category, keyword, and price limits (e.g. "under ₹20000").
-Return a JSON object with exactly the following structure:
+STRICT RULES:
+1. ONLY pick products that strictly belong to the user's requested item category (e.g. if phone requested, NEVER pick laptops or headphones).
+2. ONLY pick products that satisfy the requested specs (RAM, storage, brand, price limit).
+3. If zero products match, return empty productIds array. NEVER recommend unrelated products.
+4. Provide structured reasoning explaining why each selected product fits.
+
+Return JSON format:
 {
-  "productIds": ["id1", "id2", ...],
-  "reasoning": "A paragraph (under 60 words) explaining why these products match the search query.",
-  "recommendations": "A brief sentence (under 30 words) suggesting related alternatives or tips."
+  "productIds": ["id1", "id2"],
+  "reasoning": "Clear explanation of matches satisfying extracted requirements.",
+  "recommendations": "Category-specific follow-up advice."
 }`;
 
     const resText = await callGeminiWithFallback(client, prompt, true);
