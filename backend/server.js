@@ -22,6 +22,9 @@ connectDB().then(() => {
 // CORS configuration allowing localhost, production, and Vercel preview domains
 const allowedOrigins = [
   'http://localhost:5173',
+  'http://localhost:5174',
+  'http://127.0.0.1:5173',
+  'http://127.0.0.1:5174',
   'https://nexacart-ai.vercel.app'
 ];
 
@@ -31,11 +34,14 @@ app.use(cors({
     if (!origin) return callback(null, true);
     
     const isAllowed = allowedOrigins.includes(origin) || 
+      /^http:\/\/localhost:\d+$/.test(origin) ||
+      /^http:\/\/127\.0\.0\.1:\d+$/.test(origin) ||
       /^https:\/\/nexacart-.*\.vercel\.app$/.test(origin);
       
     if (isAllowed) {
       callback(null, true);
     } else {
+      console.warn(`[CORS Blocked] Origin: ${origin}`);
       callback(new Error(`Origin ${origin} not allowed by CORS`));
     }
   },
@@ -50,12 +56,14 @@ app.use((req, res, next) => {
 });
 
 // Routes
+const paymentRoutes = require('./routes/paymentRoutes');
+
 app.use('/api/auth', require('./routes/authRoutes'));
 app.use('/api/products', require('./routes/productRoutes'));
 app.use('/api/cart', require('./routes/cartRoutes'));
 app.use('/api/wishlist', require('./routes/wishlistRoutes'));
 app.use('/api/orders', require('./routes/orderRoutes'));
-app.use('/api/payment', require('./routes/paymentRoutes'));
+app.use('/api/payment', paymentRoutes);
 app.use('/api/ai', require('./routes/aiRoutes'));
 
 // Basic route

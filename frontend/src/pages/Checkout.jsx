@@ -3,23 +3,19 @@ import { useDispatch, useSelector } from 'react-redux';
 import { useNavigate } from 'react-router-dom';
 import { createOrder, resetOrderSuccess, fetchMyOrders } from '../redux/slices/ordersSlice';
 import { clearCart } from '../redux/slices/cartSlice';
-import { loadUserBudget, saveUserBudget, calculateBudgetMetrics, formatINR } from '../ai/budgetEngine';
-import UpiQrPaymentModal from '../components/Payment/UpiQrPaymentModal';
+import { loadUserBudget, calculateBudgetMetrics, formatINR } from '../ai/budgetEngine';
 import api from '../services/api';
 import { 
-  CreditCard, 
   MapPin, 
   Sparkles, 
   AlertTriangle, 
   CheckCircle2, 
   X, 
   ShieldCheck, 
-  Smartphone, 
-  Landmark, 
-  Wallet, 
-  Banknote, 
   RefreshCcw,
-  ArrowRight
+  ArrowRight,
+  Lock,
+  AlertCircle
 } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { Card, CardContent } from '../components/ui/card';
@@ -27,6 +23,21 @@ import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
 import { motion, AnimatePresence } from 'framer-motion';
 import toast from 'react-hot-toast';
+
+// Helper to dynamically load Razorpay Checkout SDK
+const loadRazorpayScript = () => {
+  return new Promise((resolve) => {
+    if (window.Razorpay) {
+      resolve(true);
+      return;
+    }
+    const script = document.createElement('script');
+    script.src = 'https://checkout.razorpay.com/v1/checkout.js';
+    script.onload = () => resolve(true);
+    script.onerror = () => resolve(false);
+    document.body.appendChild(script);
+  });
+};
 
 const Checkout = () => {
   const dispatch = useDispatch();
@@ -40,8 +51,8 @@ const Checkout = () => {
   const [paymentMethod, setPaymentMethod] = useState('UPI'); // Default & Recommended
 
   const [isProcessingPayment, setIsProcessingPayment] = useState(false);
-  const [upiOrderData, setUpiOrderData] = useState(null);
-  const [showUpiModal, setShowUpiModal] = useState(false);
+  const [isVerifyingPayment, setIsVerifyingPayment] = useState(false);
+  const [paymentFailed, setPaymentFailed] = useState(false);
 
   // AI Checkout Analysis Modal State
   const [showAnalysisModal, setShowAnalysisModal] = useState(false);
@@ -74,56 +85,10 @@ const Checkout = () => {
   const userBudget = loadUserBudget(userId);
   const metrics = calculateBudgetMetrics(orders, userBudget);
 
-  // Consolidated Payment Options
-  const paymentMethods = [
-    {
-      id: 'upi',
-      name: 'UPI (Recommended)',
-      desc: 'Pay via GPay, PhonePe, Paytm, BHIM, or Dynamic QR Code',
-      icon: Smartphone,
-      isRecommended: true,
-      badge: 'Fastest & Zero Fee'
-    },
-    {
-      id: 'debit',
-      name: 'Debit Card',
-      desc: 'Visa, Mastercard, RuPay, Maestro via UPI QR',
-      icon: CreditCard,
-      badge: 'Secure'
-    },
-    {
-      id: 'credit',
-      name: 'Credit Card',
-      desc: 'Visa, Mastercard, Amex via UPI QR',
-      icon: CreditCard,
-      badge: 'Rewards'
-    },
-    {
-      id: 'netbanking',
-      name: 'Net Banking',
-      desc: 'HDFC, ICICI, SBI, Axis & 50+ Banks via UPI QR',
-      icon: Landmark,
-      badge: 'All Banks'
-    },
-    {
-      id: 'wallet',
-      name: 'Wallet',
-      desc: 'Paytm Wallet, Amazon Pay, Mobikwik',
-      icon: Wallet,
-      badge: 'Fast'
-    },
-    {
-      id: 'cod',
-      name: 'Cash on Delivery',
-      desc: 'Pay cash upon doorstep delivery',
-      icon: Banknote,
-      badge: 'Pay Later'
-    }
-  ];
-
-  // Executes UPI QR Payment Order Creation or COD Flow
+  // Executes Razorpay Test Checkout or COD Flow
   const executePaymentFlow = async () => {
     setShowAnalysisModal(false);
+    setPaymentFailed(false);
 
     const orderItems = items.map((item) => ({
       product: item.product._id,
@@ -136,7 +101,7 @@ const Checkout = () => {
     const orderPayload = {
       orderItems,
       shippingAddress,
-      paymentMethod,
+      paymentMethod: paymentMethod === 'Cash on Delivery' ? 'Cash on Delivery' : 'Razorpay',
       itemsPrice: subtotal,
       taxPrice: tax,
       shippingPrice: shipping,
@@ -149,46 +114,126 @@ const Checkout = () => {
       return;
     }
 
-    // Dynamic UPI QR Payment Flow
+    // Razorpay Payment Flow
     try {
       setIsProcessingPayment(true);
-      toast.loading('Generating Dynamic UPI Payment Order...', { id: 'upi-init' });
+      toast.loading('Preparing Secure Payment...', { id: 'rzp-init' });
 
-      const res = await api.post('/payment/create-upi-order', orderPayload);
-
-      toast.dismiss('upi-init');
-
-      if (res.data.success && res.data.order) {
-        setUpiOrderData({
-          ...res.data.order,
-          upiUri: res.data.upiUri,
-          upiId: res.data.upiId
-        });
-        setShowUpiModal(true);
-      } else {
-        toast.error(res.data.message || 'Failed to create UPI order');
+      // 1. Load Razorpay SDK
+      const scriptLoaded = await loadRazorpayScript();
+      if (!scriptLoaded) {
+        toast.dismiss('rzp-init');
+        toast.error('Failed to load Razorpay SDK. Please check your network connection.');
+        setIsProcessingPayment(false);
+        return;
       }
+
+      // 2. Call backend /api/payment/create-order
+      const res = await api.post('/payment/create-order', {
+        amount: total,
+        currency: 'INR',
+        receipt: `rcpt_${Date.now()}`
+      });
+
+      toast.dismiss('rzp-init');
+
+      if (!res.data || !res.data.success) {
+        toast.error(res.data?.message || 'Unable to initialize Razorpay payment order.');
+        setIsProcessingPayment(false);
+        return;
+      }
+
+      const { key, order_id, amount, currency } = res.data;
+
+      // 3. Open Razorpay Standard Checkout Popup
+      const options = {
+        key: key || import.meta.env.VITE_RAZORPAY_KEY_ID || 'rzp_test_NexaCartKeyId',
+        amount: amount, // Amount in paise
+        currency: currency || 'INR',
+        name: 'NexaCart AI',
+        description: 'Secure Payment',
+        image: 'https://cdn-icons-png.flaticon.com/512/1170/1170576.png',
+        order_id: order_id,
+        prefill: {
+          name: `${user?.firstName || ''} ${user?.lastName || ''}`.trim() || user?.name || 'Customer',
+          email: user?.email || '',
+          contact: user?.phoneNumber || ''
+        },
+        theme: {
+          color: '#059669' // Emerald green theme matching NexaCart AI
+        },
+        handler: async (response) => {
+          try {
+            setIsVerifyingPayment(true);
+            toast.loading('Verifying Payment Status...', { id: 'rzp-verify' });
+
+            // 4. Call backend /api/payment/verify
+            const verifyRes = await api.post('/payment/verify', {
+              razorpay_order_id: response.razorpay_order_id,
+              razorpay_payment_id: response.razorpay_payment_id,
+              razorpay_signature: response.razorpay_signature,
+              orderPayload
+            });
+
+            toast.dismiss('rzp-verify');
+
+            if (verifyRes.data.success) {
+              dispatch(clearCart());
+              toast.success('Payment Verified & Order Confirmed!');
+              navigate('/payment-success', {
+                state: {
+                  orderId: verifyRes.data.orderId || verifyRes.data.order?._id,
+                  paymentId: response.razorpay_payment_id,
+                  amount: total,
+                  estimatedDelivery: '3 Business Days (2:00 PM – 7:00 PM)'
+                }
+              });
+            } else {
+              setPaymentFailed(true);
+              toast.error(verifyRes.data.message || 'Payment verification failed.');
+            }
+          } catch (err) {
+            console.error('Razorpay verification error:', err);
+            toast.dismiss('rzp-verify');
+            setPaymentFailed(true);
+            toast.error(err.response?.data?.message || 'Payment verification failed.');
+          } finally {
+            setIsVerifyingPayment(false);
+            setIsProcessingPayment(false);
+          }
+        },
+        modal: {
+          ondismiss: () => {
+            setIsProcessingPayment(false);
+            toast('Payment session cancelled by user', { icon: 'ℹ️' });
+          }
+        }
+      };
+
+      const razorpayInstance = new window.Razorpay(options);
+
+      razorpayInstance.on('payment.failed', (response) => {
+        console.error('Razorpay Payment Failed Event:', response.error);
+        setIsProcessingPayment(false);
+        setPaymentFailed(true);
+      });
+
+      razorpayInstance.open();
+
     } catch (err) {
-      console.error('UPI Order Error:', err);
-      toast.dismiss('upi-init');
-      toast.error(err.response?.data?.message || 'Failed to initialize UPI QR payment');
-    } finally {
+      console.error('Razorpay Order Creation Error:', err);
+      toast.dismiss('rzp-init');
+      toast.error(err.response?.data?.message || 'Failed to prepare secure payment. Please try again.');
       setIsProcessingPayment(false);
     }
   };
 
-  const handlePaymentSubmitted = (updatedOrder) => {
-    setShowUpiModal(false);
-    dispatch(clearCart());
-    navigate(`/order-success/${updatedOrder._id}`);
-  };
-
-  const handleFormSubmit = (e) => {
-    e.preventDefault();
+  const handleCheckoutClick = (method) => {
     if (!shippingAddress.trim()) {
       toast.error('Please enter a complete shipping address');
       return;
     }
+    setPaymentMethod(method);
 
     // AI Budget Analysis
     const purchaseTotal = total;
@@ -215,26 +260,24 @@ const Checkout = () => {
   };
 
   return (
-    <div className="max-w-6xl mx-auto space-y-6 py-2 font-sans">
+    <div className="max-w-6xl mx-auto space-y-6 py-2 font-sans relative">
       
       {/* Top Header */}
       <div className="flex items-center justify-between border-b border-slate-100 pb-4">
         <div>
           <h1 className="text-2xl font-black text-slate-900 tracking-tight">Checkout</h1>
-          <p className="text-xs text-slate-500 font-medium">Dynamic UPI QR Payment Integration</p>
+          <p className="text-xs text-slate-500 font-medium">Razorpay Secure Payment Gateway</p>
         </div>
         <div className="flex items-center gap-2 bg-emerald-50 text-emerald-800 px-3 py-1.5 rounded-full border border-emerald-200 text-xs font-bold">
           <ShieldCheck className="w-4 h-4 text-emerald-600" />
-          <span>256-Bit Encrypted UPI Payment</span>
+          <span>256-Bit Encrypted Razorpay Checkout</span>
         </div>
       </div>
 
-      <form onSubmit={handleFormSubmit} className="grid grid-cols-1 lg:grid-cols-3 gap-8 items-start">
+      <form onSubmit={(e) => e.preventDefault()} className="grid grid-cols-1 lg:grid-cols-3 gap-8 items-start">
         
-        {/* Left Section: Shipping Address & Payment Selection */}
+        {/* Left Section: Delivery Address */}
         <div className="lg:col-span-2 space-y-6">
-          
-          {/* Section 1: Shipping Address */}
           <div className="bg-white p-6 sm:p-8 rounded-3xl shadow-sm border border-slate-100 space-y-4">
             <h2 className="font-bold text-slate-900 text-base flex items-center gap-2 border-b border-slate-100 pb-3">
               <MapPin className="w-5 h-5 text-emerald-600" /> 1. Delivery Address
@@ -254,74 +297,10 @@ const Checkout = () => {
               </p>
             </div>
           </div>
-
-          {/* Section 2: Payment Method Selection */}
-          <div className="bg-white p-6 sm:p-8 rounded-3xl shadow-sm border border-slate-100 space-y-6">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-              <h2 className="font-bold text-slate-900 text-base flex items-center gap-2">
-                <CreditCard className="w-5 h-5 text-emerald-600" /> 2. Payment Method
-              </h2>
-              <span className="text-[11px] text-slate-400 font-semibold">Select preferred payment mode</span>
-            </div>
-            
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
-              {paymentMethods.map((method) => {
-                const IconComponent = method.icon;
-                const isSelected = paymentMethod === method.name;
-
-                return (
-                  <div 
-                    key={method.id}
-                    onClick={() => setPaymentMethod(method.name)}
-                    className={`p-4 rounded-2xl border-2 cursor-pointer transition-all space-y-2.5 relative ${
-                      isSelected
-                        ? 'border-emerald-600 bg-emerald-50/40 shadow-sm'
-                        : 'border-slate-100 hover:border-slate-200 bg-white'
-                    }`}
-                  >
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2.5">
-                        <input 
-                          type="radio" 
-                          name="paymentMethodRadio" 
-                          id={method.id}
-                          checked={isSelected}
-                          onChange={() => setPaymentMethod(method.name)}
-                          className="accent-emerald-600 cursor-pointer w-4 h-4"
-                        />
-                        <div className="p-2 rounded-xl bg-slate-50 border border-slate-100 text-slate-700">
-                          <IconComponent className="w-4 h-4" />
-                        </div>
-                        <label htmlFor={method.id} className="font-extrabold text-xs text-slate-900 cursor-pointer">
-                          {method.name}
-                        </label>
-                      </div>
-
-                      {method.badge && (
-                        <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full ${
-                          method.isRecommended 
-                            ? 'bg-emerald-600 text-white' 
-                            : 'bg-slate-100 text-slate-600'
-                        }`}>
-                          {method.badge}
-                        </span>
-                      )}
-                    </div>
-
-                    <p className="text-[11px] text-slate-400 pl-6 leading-relaxed">
-                      {method.desc}
-                    </p>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
         </div>
 
         {/* Right Section: Order Summary & Action */}
         <div className="lg:col-span-1 space-y-6">
-          
-          {/* Order Summary Card */}
           <Card className="border-slate-100 rounded-3xl shadow-sm bg-white overflow-hidden">
             <CardContent className="p-6 space-y-5">
               <h2 className="font-black text-slate-900 text-base border-b border-slate-100 pb-3">Order Summary</h2>
@@ -371,25 +350,44 @@ const Checkout = () => {
                 <span className="text-emerald-600">₹{total.toLocaleString('en-IN')}</span>
               </div>
 
-              <Button 
-                type="submit"
-                disabled={isProcessingPayment || orderLoading}
-                className="w-full bg-emerald-600 hover:bg-emerald-500 text-white rounded-2xl py-6 font-bold text-xs shadow-lg shadow-emerald-100 flex items-center justify-center gap-2 cursor-pointer"
-              >
-                {isProcessingPayment || orderLoading ? (
-                  <>
-                    <RefreshCcw className="w-4 h-4 animate-spin" /> Processing...
-                  </>
-                ) : (
-                  <>
-                    {paymentMethod === 'Cash on Delivery' ? 'Place COD Order' : `Pay via Dynamic UPI QR (₹${total.toLocaleString('en-IN')})`} <ArrowRight className="w-4 h-4" />
-                  </>
-                )}
-              </Button>
+              <div className="space-y-3">
+                <Button 
+                  type="button"
+                  onClick={() => handleCheckoutClick('UPI')}
+                  disabled={isProcessingPayment || isVerifyingPayment || orderLoading}
+                  className="w-full bg-emerald-600 hover:bg-emerald-500 text-white rounded-2xl py-6 font-bold text-xs shadow-lg shadow-emerald-100 flex items-center justify-center gap-2 cursor-pointer transition-all hover:-translate-y-0.5"
+                >
+                  {isProcessingPayment || isVerifyingPayment ? (
+                    <>
+                      <RefreshCcw className="w-4 h-4 animate-spin" /> Preparing Secure Payment...
+                    </>
+                  ) : (
+                    <>
+                      Pay via Razorpay (₹{total.toLocaleString('en-IN')}) <ArrowRight className="w-4 h-4" />
+                    </>
+                  )}
+                </Button>
+
+                <Button 
+                  type="button"
+                  onClick={() => handleCheckoutClick('Cash on Delivery')}
+                  disabled={isProcessingPayment || isVerifyingPayment || orderLoading}
+                  variant="outline"
+                  className="w-full border-slate-200 text-slate-700 hover:bg-slate-50 rounded-2xl py-6 font-bold text-xs flex items-center justify-center gap-2 cursor-pointer transition-all hover:-translate-y-0.5"
+                >
+                  {orderLoading && paymentMethod === 'Cash on Delivery' ? (
+                    <>
+                      <RefreshCcw className="w-4 h-4 animate-spin" /> Processing...
+                    </>
+                  ) : (
+                    'Place Cash on Delivery Order'
+                  )}
+                </Button>
+              </div>
             </CardContent>
           </Card>
 
-          {/* AI Budget & Savings Insight Card */}
+          {/* AI Budget Insight Card */}
           <div className="bg-emerald-50/70 border border-emerald-100 rounded-3xl p-5 space-y-2.5 text-xs">
             <div className="flex items-center gap-1.5 text-emerald-900 font-extrabold uppercase text-[10px] tracking-wider">
               <Sparkles className="w-4 h-4 text-emerald-600" /> AI Shopping & Budget Insight
@@ -407,12 +405,10 @@ const Checkout = () => {
               </div>
             </div>
           </div>
-
         </div>
-
       </form>
 
-      {/* AI Pre-Purchase Analysis Modal */}
+      {/* AI Pre-Purchase Evaluation Modal */}
       <AnimatePresence>
         {showAnalysisModal && analysisData && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-sm">
@@ -467,10 +463,10 @@ const Checkout = () => {
               <div className="flex flex-col gap-2 pt-2">
                 <Button
                   onClick={executePaymentFlow}
-                  disabled={isProcessingPayment}
+                  disabled={isProcessingPayment || isVerifyingPayment}
                   className="w-full bg-emerald-600 hover:bg-emerald-500 text-white rounded-2xl py-5 font-bold text-xs shadow-md flex items-center justify-center gap-2 cursor-pointer"
                 >
-                  {paymentMethod === 'Cash on Delivery' ? 'Confirm & Place Order' : 'Confirm & Generate Dynamic UPI QR'} <ArrowRight className="w-4 h-4" />
+                  {paymentMethod === 'Cash on Delivery' ? 'Confirm & Place Order' : 'Proceed to Secure Payment'} <ArrowRight className="w-4 h-4" />
                 </Button>
                 <Button
                   type="button"
@@ -486,13 +482,72 @@ const Checkout = () => {
         )}
       </AnimatePresence>
 
-      {/* Dynamic UPI QR Payment Modal */}
-      <UpiQrPaymentModal
-        isOpen={showUpiModal}
-        onClose={() => setShowUpiModal(false)}
-        orderData={upiOrderData}
-        onPaymentSubmitted={handlePaymentSubmitted}
-      />
+      {/* Loading Overlay */}
+      <AnimatePresence>
+        {(isProcessingPayment || isVerifyingPayment) && (
+          <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-slate-950/70 backdrop-blur-md text-white p-4">
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              className="bg-slate-900 border border-slate-800 p-8 rounded-3xl shadow-2xl text-center space-y-4 max-w-sm w-full"
+            >
+              <div className="w-16 h-16 bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 rounded-full flex items-center justify-center mx-auto animate-spin">
+                <RefreshCcw className="w-8 h-8" />
+              </div>
+              <div className="space-y-1">
+                <h3 className="text-lg font-black text-white">Preparing Secure Payment...</h3>
+                <p className="text-xs text-slate-400">
+                  {isVerifyingPayment ? 'Verifying payment signature with Razorpay...' : 'Connecting to Razorpay gateway...'}
+                </p>
+              </div>
+              <div className="flex items-center justify-center gap-2 text-[10px] font-bold text-emerald-400 uppercase tracking-wider bg-emerald-950/60 py-1.5 px-3 rounded-full border border-emerald-800/50">
+                <Lock className="w-3 h-3" /> 256-Bit Encrypted
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Payment Failed Modal */}
+      <AnimatePresence>
+        {paymentFailed && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-md">
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="bg-white max-w-md w-full rounded-3xl p-6 shadow-2xl border border-slate-100 text-center space-y-5"
+            >
+              <div className="w-16 h-16 bg-rose-50 border border-rose-200 text-rose-600 rounded-full flex items-center justify-center mx-auto">
+                <AlertCircle className="w-8 h-8" />
+              </div>
+              <div className="space-y-1.5">
+                <h3 className="text-xl font-black text-slate-900">Payment Unsuccessful</h3>
+                <p className="text-xs text-slate-500 leading-relaxed">
+                  Your transaction was cancelled or could not be verified. Don't worry, no funds were deducted from your account.
+                </p>
+              </div>
+
+              <div className="space-y-2 pt-2">
+                <Button
+                  onClick={executePaymentFlow}
+                  className="w-full bg-emerald-600 hover:bg-emerald-500 text-white rounded-2xl py-5 text-xs font-bold shadow-md cursor-pointer"
+                >
+                  Retry Payment
+                </Button>
+                <Button
+                  onClick={() => setPaymentFailed(false)}
+                  variant="outline"
+                  className="w-full border-slate-200 text-slate-700 rounded-2xl py-5 text-xs font-bold cursor-pointer"
+                >
+                  Return to Checkout
+                </Button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
 
     </div>
   );

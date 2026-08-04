@@ -1,6 +1,8 @@
 const Order = require('../models/Order');
 const Product = require('../models/Product');
 const Payment = require('../models/Payment');
+const { createRazorpayOrder } = require('../services/razorpayService');
+const { verifyRazorpaySignature } = require('../utils/paymentVerification');
 
 // Delivery partner helpers
 const getRandomDeliveryPartner = () => {
@@ -14,300 +16,177 @@ const generateTrackingNumber = (partner) => {
   return `${prefix}${randNum}IN`;
 };
 
-// @desc    Get UPI Payment Configuration (UPI ID & Merchant Name)
-// @route   GET /api/payment/upi-config
-// @access  Public
-const getUpiConfig = (req, res) => {
-  const upiId = process.env.UPI_ID || 'nexacart@upi';
-  const merchantName = process.env.UPI_MERCHANT_NAME || 'NexaCart AI';
-  console.log(`[UPI Config Request] Returning UPI ID: ${upiId}`);
-  res.json({ upiId, merchantName });
+// @desc    Create Razorpay Order
+// @route   POST /api/payment/create-order
+// @access  Private
+const createOrder = async (req, res) => {
+  try {
+    const { amount, currency = 'INR', receipt } = req.body;
+
+    console.log('\n======================================================');
+    console.log('[Razorpay Order Creation Request]');
+    console.log(`- Customer: ${req.user.email} (${req.user._id})`);
+    console.log(`- Amount: ₹${amount}`);
+    console.log('======================================================\n');
+
+    if (!amount || Number(amount) <= 0) {
+      return res.status(400).json({ success: false, message: 'Invalid order amount' });
+    }
+
+    const rzpOrder = await createRazorpayOrder({
+      amount,
+      currency,
+      receipt: receipt || `rcpt_${req.user._id.toString().substring(0, 6)}_${Date.now()}`,
+      notes: {
+        userId: req.user._id.toString(),
+        userEmail: req.user.email
+      }
+    });
+
+    return res.status(200).json({
+      success: true,
+      order_id: rzpOrder.id,
+      amount: rzpOrder.amount, // in paise
+      currency: rzpOrder.currency,
+      key: process.env.RAZORPAY_KEY_ID
+    });
+
+  } catch (error) {
+    console.error('[Error Creating Razorpay Order]:', error.message);
+    res.status(500).json({
+      success: false,
+      message: error.message || 'Unable to create Razorpay Order'
+    });
+  }
 };
 
-// @desc    Create Order & Generate Dynamic UPI Payment URI
-// @route   POST /api/payment/create-upi-order
+// @desc    Verify Razorpay Payment Signature & Create/Confirm Order
+// @route   POST /api/payment/verify
 // @access  Private
-const createUpiOrder = async (req, res) => {
+const verifyPayment = async (req, res) => {
   try {
     const {
-      orderItems,
-      shippingAddress,
-      paymentMethod = 'UPI',
+      razorpay_order_id,
+      razorpay_payment_id,
+      razorpay_signature,
+      orderPayload
+    } = req.body;
+
+    console.log('\n======================================================');
+    console.log('[Razorpay Payment Verification Request]');
+    console.log(`- Razorpay Order ID: ${razorpay_order_id}`);
+    console.log(`- Razorpay Payment ID: ${razorpay_payment_id}`);
+    console.log('======================================================\n');
+
+    // 1. Signature Verification
+    const isValid = verifyRazorpaySignature({
+      razorpay_order_id,
+      razorpay_payment_id,
+      razorpay_signature
+    });
+
+    if (!isValid) {
+      console.error('\x1b[31m%s\x1b[0m', '[Razorpay Verification Failed]: Signature mismatch');
+      return res.status(400).json({
+        success: false,
+        message: 'Payment verification failed. Invalid signature.'
+      });
+    }
+
+    // Extract order details from payload
+    const {
+      orderItems = [],
+      shippingAddress = 'Address Provided at Checkout',
+      paymentMethod = 'Razorpay',
       itemsPrice = 0,
       taxPrice = 0,
       shippingPrice = 0,
       totalPrice = 0
-    } = req.body;
-
-    console.log('\n======================================================');
-    console.log('[Dynamic UPI QR Payment Request]');
-    console.log(`- Customer: ${req.user.email} (${req.user._id})`);
-    console.log(`- Total Price: ₹${totalPrice}`);
-    console.log(`- Items Count: ${orderItems?.length || 0}`);
-    console.log('======================================================\n');
-
-    if (!orderItems || orderItems.length === 0) {
-      return res.status(400).json({ message: 'No items in order' });
-    }
-
-    if (!totalPrice || totalPrice <= 0) {
-      return res.status(400).json({ message: 'Invalid order total' });
-    }
+    } = orderPayload || req.body;
 
     const partner = getRandomDeliveryPartner();
     const trackingNo = generateTrackingNumber(partner);
     const expectedDate = new Date();
     expectedDate.setDate(expectedDate.getDate() + 3);
 
-    // 1. Create initial Order in MongoDB with status 'Waiting for Payment'
+    // 2. Create Confirmed Order in DB
     const order = new Order({
       user: req.user._id,
       orderItems,
-      shippingAddress: shippingAddress || 'Address Provided at Checkout',
+      shippingAddress,
       paymentMethod,
       itemsPrice,
       taxPrice,
       shippingPrice,
       totalPrice,
-      isPaid: false,
-      status: 'Waiting for Payment',
+      isPaid: true,
+      paidAt: new Date(),
+      status: 'Confirmed',
       deliveryPartner: partner,
       trackingNumber: trackingNo,
       expectedDeliveryDate: expectedDate,
       estimatedDeliveryTime: '2:00 PM – 7:00 PM',
+      paymentResult: {
+        id: razorpay_payment_id,
+        status: 'Completed',
+        update_time: new Date().toISOString(),
+        email_address: req.user.email
+      },
       timeline: [
-        { 
-          status: 'Waiting for Payment', 
-          timestamp: new Date(), 
-          description: 'Order created. Pending customer UPI payment submission.' 
+        {
+          status: 'Confirmed',
+          timestamp: new Date(),
+          description: `Payment verified via Razorpay (${razorpay_payment_id}). Order confirmed.`
         }
       ]
     });
 
     const createdOrder = await order.save();
 
-    // 2. Generate Dynamic UPI Payment URI
-    const upiId = process.env.UPI_ID || 'nexacart@upi';
-    const merchantName = encodeURIComponent(process.env.UPI_MERCHANT_NAME || 'NexaCart AI');
-    const orderIdStr = createdOrder._id.toString();
-    const amountFormatted = totalPrice.toFixed(2);
-
-    // Standard UPI Payment URI Format:
-    // upi://pay?pa=YOUR_UPI_ID&pn=NexaCart AI&am=<order amount>&tn=<order id>&cu=INR
-    const upiUri = `upi://pay?pa=${upiId}&pn=${merchantName}&am=${amountFormatted}&tn=${orderIdStr}&cu=INR`;
-
-    createdOrder.upiUri = upiUri;
-    await createdOrder.save();
-
-    // 3. Create initial Payment Record in MongoDB
+    // 3. Create Payment Record in DB
     const payment = new Payment({
-      paymentId: `pay_upi_${Date.now()}`,
-      orderId: orderIdStr,
+      paymentId: razorpay_payment_id,
+      orderId: razorpay_order_id,
       userOrder: createdOrder._id,
       userId: req.user._id,
       amount: totalPrice,
       currency: 'INR',
       paymentMethod,
-      upiId,
-      upiUri,
-      status: 'Waiting for Payment',
-      transactionId: `TXN_PENDING_${Date.now()}`,
-      gateway: 'UPI QR'
+      status: 'Captured',
+      transactionId: razorpay_payment_id,
+      gateway: 'Razorpay'
     });
 
-    const createdPayment = await payment.save();
+    await payment.save();
 
-    console.log('\x1b[32m%s\x1b[0m', `[UPI Order Created Successfully]: Order #${createdOrder._id}`);
-    console.log(`- Dynamic UPI URI: ${upiUri}`);
-
-    return res.status(201).json({
-      success: true,
-      message: 'UPI order created successfully',
-      order: createdOrder,
-      payment: createdPayment,
-      upiUri,
-      upiId,
-      merchantName: process.env.UPI_MERCHANT_NAME || 'NexaCart AI'
-    });
-
-  } catch (error) {
-    console.error('\x1b[31m%s\x1b[0m', '[Error Creating UPI Order]:', error.message);
-    res.status(500).json({ message: error.message || 'Failed to create UPI payment order' });
-  }
-};
-
-// @desc    Customer Submits UPI Payment UTR Ref / Screenshot
-// @route   POST /api/payment/submit-upi-payment
-// @access  Private
-const submitUpiPayment = async (req, res) => {
-  try {
-    const { orderId, upiTransactionRef, paymentScreenshot } = req.body;
-
-    console.log(`[Customer Payment Submission] Order #${orderId}, UTR: ${upiTransactionRef}`);
-
-    if (!orderId) {
-      return res.status(400).json({ message: 'Order ID is required' });
-    }
-
-    const order = await Order.findById(orderId);
-    if (!order) {
-      return res.status(404).json({ message: 'Order not found' });
-    }
-
-    // Update Order fields
-    order.status = 'Payment Submitted';
-    order.upiTransactionRef = upiTransactionRef || order.upiTransactionRef || `UTR_${Date.now()}`;
-    if (paymentScreenshot) {
-      order.paymentScreenshot = paymentScreenshot;
-    }
-    order.paymentSubmittedAt = new Date();
-    order.timeline.push({
-      status: 'Payment Submitted',
-      timestamp: new Date(),
-      description: `Payment submitted by customer. UTR/Ref: ${order.upiTransactionRef}. Pending Admin Verification.`
-    });
-
-    const updatedOrder = await order.save();
-
-    // Update Payment record
-    const payment = await Payment.findOne({ userOrder: orderId });
-    if (payment) {
-      payment.status = 'Payment Submitted';
-      payment.upiTransactionRef = order.upiTransactionRef;
-      payment.transactionId = order.upiTransactionRef;
-      if (paymentScreenshot) {
-        payment.paymentScreenshot = paymentScreenshot;
-      }
-      await payment.save();
-    }
-
-    console.log('\x1b[32m%s\x1b[0m', `[Payment Proof Submitted]: Order #${orderId} marked as Payment Submitted.`);
-
-    return res.json({
-      success: true,
-      message: 'Payment details submitted successfully. Waiting for Admin verification.',
-      order: updatedOrder
-    });
-
-  } catch (error) {
-    console.error('Error submitting UPI payment:', error);
-    res.status(500).json({ message: error.message || 'Failed to submit payment details' });
-  }
-};
-
-// @desc    Admin Verifies UPI Payment (Approve / Reject / Request Again)
-// @route   POST /api/payment/admin/verify-payment
-// @access  Private/Admin
-const adminVerifyPayment = async (req, res) => {
-  try {
-    const { orderId, action, adminNotes } = req.body; // action: 'Approve' | 'Reject' | 'Request Again'
-
-    console.log(`[Admin Payment Verification] Action: ${action} for Order #${orderId}`);
-
-    if (!orderId || !action) {
-      return res.status(400).json({ message: 'Order ID and action are required' });
-    }
-
-    const order = await Order.findById(orderId);
-    if (!order) {
-      return res.status(404).json({ message: 'Order not found' });
-    }
-
-    const payment = await Payment.findOne({ userOrder: orderId });
-
-    if (action === 'Approve') {
-      order.isPaid = true;
-      order.paidAt = new Date();
-      order.status = 'Confirmed';
-      order.paymentVerifiedAt = new Date();
-      order.adminNotes = adminNotes || 'Payment verified and approved by Admin.';
-      order.timeline.push({
-        status: 'Admin Verified',
-        timestamp: new Date(),
-        description: `Payment approved by Admin (${req.user.email}). Status updated to Paid & Confirmed.`
-      });
-
-      const updatedOrder = await order.save();
-
-      if (payment) {
-        payment.status = 'Captured';
-        payment.adminNotes = order.adminNotes;
-        await payment.save();
-      }
-
-      // Reduce product stock count
-      for (const item of order.orderItems) {
+    // 4. Inventory Stock Reduction
+    for (const item of orderItems) {
+      if (item.product) {
         const product = await Product.findById(item.product);
         if (product) {
           product.countInStock = Math.max(0, product.countInStock - item.quantity);
           await product.save();
-          console.log(`[Inventory]: Reduced stock for "${product.name}" to ${product.countInStock}`);
+          console.log(`[Inventory]: Stock reduced for "${product.name}" to ${product.countInStock}`);
         }
       }
-
-      console.log(`[Admin Approval]: Order #${orderId} marked as Paid & Confirmed.`);
-
-      return res.json({
-        success: true,
-        message: 'Payment approved. Order marked as Paid and Confirmed.',
-        order: updatedOrder
-      });
-
-    } else if (action === 'Reject') {
-      order.isPaid = false;
-      order.status = 'Payment Rejected';
-      order.adminNotes = adminNotes || 'Payment verification rejected by Admin.';
-      order.timeline.push({
-        status: 'Payment Rejected',
-        timestamp: new Date(),
-        description: `Payment rejected by Admin. Reason: ${order.adminNotes}`
-      });
-
-      const updatedOrder = await order.save();
-
-      if (payment) {
-        payment.status = 'Rejected';
-        payment.adminNotes = order.adminNotes;
-        await payment.save();
-      }
-
-      return res.json({
-        success: true,
-        message: 'Payment rejected by Admin.',
-        order: updatedOrder
-      });
-
-    } else if (action === 'Request Again') {
-      order.isPaid = false;
-      order.status = 'Waiting for Payment';
-      order.adminNotes = adminNotes || 'Please resubmit your payment transaction ID or screenshot.';
-      order.timeline.push({
-        status: 'Waiting for Payment',
-        timestamp: new Date(),
-        description: `Admin requested payment resubmission. Note: ${order.adminNotes}`
-      });
-
-      const updatedOrder = await order.save();
-
-      if (payment) {
-        payment.status = 'Request Again';
-        payment.adminNotes = order.adminNotes;
-        await payment.save();
-      }
-
-      return res.json({
-        success: true,
-        message: 'Requested payment resubmission from customer.',
-        order: updatedOrder
-      });
-
-    } else {
-      return res.status(400).json({ message: 'Invalid verification action' });
     }
 
+    console.log('\x1b[32m%s\x1b[0m', `[Razorpay Payment Success]: Order #${createdOrder._id} created.`);
+
+    return res.status(201).json({
+      success: true,
+      message: 'Payment verified and order confirmed successfully.',
+      order: createdOrder,
+      orderId: createdOrder._id,
+      paymentId: razorpay_payment_id
+    });
+
   } catch (error) {
-    console.error('Admin Verification Error:', error);
-    res.status(500).json({ message: error.message || 'Admin verification failed' });
+    console.error('[Razorpay Payment Verification Error]:', error);
+    return res.status(500).json({
+      success: false,
+      message: error.message || 'Payment verification failed'
+    });
   }
 };
 
@@ -347,10 +226,8 @@ const getPaymentByOrderId = async (req, res) => {
 };
 
 module.exports = {
-  getUpiConfig,
-  createUpiOrder,
-  submitUpiPayment,
-  adminVerifyPayment,
+  createOrder,
+  verifyPayment,
   getAdminPayments,
   getPaymentByOrderId
 };

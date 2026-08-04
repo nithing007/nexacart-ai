@@ -15,16 +15,21 @@ const getBaseURL = () => {
   return sanitizedUrl;
 };
 
+export const API_BASE_URL = getBaseURL();
+
 const api = axios.create({
-  baseURL: getBaseURL(),
+  baseURL: API_BASE_URL,
   headers: {
     'Content-Type': 'application/json',
   },
 });
 
-// Interceptor to add JWT token from localStorage to the headers
+// Interceptor to add JWT token and strip leading redundant /api from request path
 api.interceptors.request.use(
   (config) => {
+    if (config.url && config.url.startsWith('/api/')) {
+      config.url = config.url.replace(/^\/api/, '');
+    }
     const token = localStorage.getItem('token');
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;

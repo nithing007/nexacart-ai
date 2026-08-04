@@ -37,6 +37,7 @@ const AdminCustomerQueries = lazy(() => import('./pages/admin/CustomerQueries'))
 const AdminSmartCoupons = lazy(() => import('./pages/admin/SmartCoupons'));
 const AdminExportReports = lazy(() => import('./pages/admin/ExportReports'));
 const OrderSuccess = lazy(() => import('./pages/OrderSuccess'));
+const PaymentSuccess = lazy(() => import('./pages/PaymentSuccess'));
 const AdminSettings = lazy(() => import('./pages/admin/AdminSettings'));
 const AdminProfile = lazy(() => import('./pages/admin/AdminProfile'));
 const AdminPayments = lazy(() => import('./pages/admin/PaymentManagement'));
@@ -86,6 +87,7 @@ function App() {
             <Route path="wishlist" element={<Wishlist />} />
             <Route path="checkout" element={<Checkout />} />
             <Route path="order-success/:orderId" element={<OrderSuccess />} />
+            <Route path="payment-success" element={<PaymentSuccess />} />
             <Route path="orders" element={<Orders />} />
             <Route path="order/:id" element={<OrderDetail />} />
             <Route path="profile" element={<Profile />} />
