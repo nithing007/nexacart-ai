@@ -27,8 +27,12 @@ const api = axios.create({
 // Interceptor to add JWT token and strip leading redundant /api from request path
 api.interceptors.request.use(
   (config) => {
-    if (config.url && config.url.startsWith('/api/')) {
-      config.url = config.url.replace(/^\/api/, '');
+    if (config.url) {
+      if (config.url.startsWith('/api/')) {
+        config.url = config.url.replace(/^\/api/, '');
+      } else if (config.url.startsWith('api/')) {
+        config.url = config.url.replace(/^api\//, '/');
+      }
     }
     const token = localStorage.getItem('token');
     if (token) {

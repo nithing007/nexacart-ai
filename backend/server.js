@@ -28,9 +28,16 @@ const allowedOrigins = [
   'https://nexacart-ai.vercel.app'
 ];
 
+if (process.env.CLIENT_URL) {
+  const sanitizedClientUrl = process.env.CLIENT_URL.replace(/\/$/, '');
+  if (!allowedOrigins.includes(sanitizedClientUrl)) {
+    allowedOrigins.push(sanitizedClientUrl);
+  }
+}
+
 app.use(cors({
   origin: function (origin, callback) {
-    // Allow requests with no origin (like mobile apps or curl)
+    // Allow requests with no origin (like mobile apps, Postman, or curl)
     if (!origin) return callback(null, true);
     
     const isAllowed = allowedOrigins.includes(origin) || 
@@ -45,6 +52,8 @@ app.use(cors({
       callback(new Error(`Origin ${origin} not allowed by CORS`));
     }
   },
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
   credentials: true
 }));
 app.use(express.json());
