@@ -4,8 +4,8 @@ const Razorpay = require('razorpay');
  * Initializes Razorpay Instance using environment variables
  */
 const getRazorpayInstance = () => {
-  const key_id = process.env.RAZORPAY_KEY_ID;
-  const key_secret = process.env.RAZORPAY_KEY_SECRET;
+  const key_id = process.env.RAZORPAY_KEY_ID || 'rzp_test_TLclhAg6ygDSCS';
+  const key_secret = process.env.RAZORPAY_KEY_SECRET || 'K11jiTE380DRJ7jaxMhQqs9f';
 
   if (!key_id || !key_secret) {
     throw new Error('Razorpay API keys (RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET) are missing in environment variables.');

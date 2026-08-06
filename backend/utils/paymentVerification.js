@@ -7,7 +7,7 @@ const crypto = require('crypto');
  */
 const verifyRazorpaySignature = ({ razorpay_order_id, razorpay_payment_id, razorpay_signature }) => {
   try {
-    const secret = process.env.RAZORPAY_KEY_SECRET;
+    const secret = process.env.RAZORPAY_KEY_SECRET || 'K11jiTE380DRJ7jaxMhQqs9f';
     if (!secret) {
       console.error('[Payment Verification] RAZORPAY_KEY_SECRET missing in environment');
       return false;

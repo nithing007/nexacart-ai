@@ -48,7 +48,7 @@ const createOrder = async (req, res) => {
       order_id: rzpOrder.id,
       amount: rzpOrder.amount, // in paise
       currency: rzpOrder.currency,
-      key: process.env.RAZORPAY_KEY_ID
+      key: process.env.RAZORPAY_KEY_ID || 'rzp_test_TLclhAg6ygDSCS'
     });
 
   } catch (error) {

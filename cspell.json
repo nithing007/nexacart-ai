@@ -20,7 +20,17 @@
     "twMerge",
     "reduxjs",
     "antigravity",
-    "seeder"
+    "seeder",
+    "razorpay",
+    "Razorpay",
+    "onrender",
+    "Vercel",
+    "paise",
+    "rcpt",
+    "DTDC",
+    "Delhivery",
+    "XpressBees",
+    "Ekart"
   ],
   "ignoreWords": []
 }

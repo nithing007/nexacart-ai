@@ -104,6 +104,8 @@ app.listen(PORT, () => {
   console.log(`\n======================================================`);
   console.log(`🚀 NexaCart Backend running on port ${PORT}`);
   console.log(`- Environment: ${process.env.NODE_ENV || 'development'}`);
+  console.log(`- Razorpay Key ID: ${process.env.RAZORPAY_KEY_ID ? 'Loaded' : 'Missing (Using Test Fallback)'}`);
+  console.log(`- Razorpay Key Secret: ${process.env.RAZORPAY_KEY_SECRET ? 'Loaded' : 'Missing (Using Test Fallback)'}`);
   console.log(`================ REGISTERED ROUTES ================`);
   console.log(`- POST /api/payment/create-order`);
   console.log(`- POST /api/payment/verify`);
