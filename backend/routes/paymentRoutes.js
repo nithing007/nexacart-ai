@@ -18,5 +18,6 @@ router.get('/order/:orderId', protect, getPaymentByOrderId);
 
 // Protected Admin routes
 router.get('/admin/all', protect, adminOnly, getAdminPayments);
+router.post('/admin/verify-payment', protect, adminOnly, verifyPayment);
 
 module.exports = router;

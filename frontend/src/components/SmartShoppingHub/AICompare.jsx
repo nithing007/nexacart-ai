@@ -108,7 +108,7 @@ const AICompare = () => {
       let geminiComparisonText = '';
       try {
         const prompt = `Perform a side-by-side product comparison for a shopper between Product 1: "${match1.name}" (${match1.category}, Price: ₹${match1.price}) and Product 2: "${match2.name}" (${match2.category}, Price: ₹${match2.price}). Provide details on Key Differences, Pros & Cons, Display, Camera/Build, Battery, Performance, Best For, and Final AI Recommendation. Never fabricate non-existent specs.`;
-        const geminiRes = await api.post('/api/ai/test', { prompt });
+        const geminiRes = await api.post('/ai/test', { prompt });
         geminiComparisonText = geminiRes.data?.response || '';
       } catch {
         // Fallback structured generation

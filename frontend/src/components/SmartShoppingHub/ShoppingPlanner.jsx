@@ -121,7 +121,7 @@ const ShoppingPlanner = () => {
       let geminiPlanText = '';
       try {
         const prompt = `Create a short AI shopping plan summary for a customer with scenario: "${scenarioText}". Total estimated cost is ₹${totalCost}. Mention key benefits, budget tips, and category breakdowns.`;
-        const geminiRes = await api.post('/api/ai/test', { prompt });
+        const geminiRes = await api.post('/ai/test', { prompt });
         geminiPlanText = geminiRes.data?.response || '';
       } catch {
         // Fallback

@@ -73,6 +73,8 @@ app.use('/api/cart', require('./routes/cartRoutes'));
 app.use('/api/wishlist', require('./routes/wishlistRoutes'));
 app.use('/api/orders', require('./routes/orderRoutes'));
 app.use('/api/payment', paymentRoutes);
+app.use('/api/payments', paymentRoutes);
+app.use('/payment', paymentRoutes);
 app.use('/api/ai', require('./routes/aiRoutes'));
 
 // Basic route
@@ -99,5 +101,19 @@ app.use((err, req, res, next) => {
 const PORT = process.env.PORT || 5000;
 
 app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
+  console.log(`\n======================================================`);
+  console.log(`🚀 NexaCart Backend running on port ${PORT}`);
+  console.log(`- Environment: ${process.env.NODE_ENV || 'development'}`);
+  console.log(`================ REGISTERED ROUTES ================`);
+  console.log(`- POST /api/payment/create-order`);
+  console.log(`- POST /api/payment/verify`);
+  console.log(`- GET  /api/payment/order/:orderId`);
+  console.log(`- GET  /api/payment/admin/all`);
+  console.log(`- POST /api/payment/admin/verify-payment`);
+  console.log(`- POST /api/auth/login`);
+  console.log(`- POST /api/auth/register`);
+  console.log(`- GET  /api/products`);
+  console.log(`- GET  /api/cart`);
+  console.log(`- GET  /api/orders`);
+  console.log(`======================================================\n`);
 });
