@@ -301,7 +301,7 @@ const Login = () => {
             <div className="px-8 pt-5 text-left pb-4">
               <h2 className="text-[22px] font-normal text-slate-800 leading-tight">Choose an account</h2>
               <p className="text-xs text-slate-500 mt-2">
-                to continue to <span className="text-blue-600 hover:underline cursor-pointer">issue-tracker-gamma-inky.vercel.app</span>
+                to continue to <span className="text-blue-600 hover:underline cursor-pointer">{window.location.hostname || 'nexacart-ai.vercel.app'}</span>
               </p>
             </div>
 
