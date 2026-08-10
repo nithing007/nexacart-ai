@@ -165,12 +165,12 @@ const updateUserProfile = async (req, res) => {
   }
 };
 
-// @desc    Authenticate or register user with Google profile/credential
+// @desc    Authenticate or register user with Google profile/credential/token
 // @route   POST /api/auth/google
 // @access  Public
 const googleAuth = async (req, res) => {
   try {
-    const { idToken, credential, email, firstName, lastName, googleId } = req.body;
+    const { idToken, credential, accessToken, email, firstName, lastName, googleId } = req.body;
 
     let targetEmail = email;
     let targetFirstName = firstName;
@@ -194,10 +194,31 @@ const googleAuth = async (req, res) => {
           
           const maskedSub = payload.sub ? `${payload.sub.slice(0, 4)}...` : 'N/A';
           const maskedEmail = payload.email ? `${payload.email.slice(0, 3)}***@${payload.email.split('@')[1]}` : 'N/A';
-          console.log(`[Google OAuth Verified] sub: ${maskedSub}, email: ${maskedEmail}`);
+          console.log(`[Google OAuth Verified ID Token] sub: ${maskedSub}, email: ${maskedEmail}`);
         }
       } catch (verifyError) {
-        console.warn(`[Google OAuth Token Verification Warning] ${verifyError.message}`);
+        console.warn(`[Google OAuth ID Token Verification Warning] ${verifyError.message}`);
+      }
+    } else if (accessToken) {
+      try {
+        const fetchRes = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
+          headers: { Authorization: `Bearer ${accessToken}` }
+        });
+        if (fetchRes.ok) {
+          const payload = await fetchRes.json();
+          if (payload && payload.email) {
+            targetEmail = payload.email;
+            targetGoogleId = payload.sub;
+            targetFirstName = payload.given_name || payload.name?.split(' ')[0] || 'Google';
+            targetLastName = payload.family_name || payload.name?.split(' ').slice(1).join(' ') || 'User';
+
+            const maskedSub = payload.sub ? `${payload.sub.slice(0, 4)}...` : 'N/A';
+            const maskedEmail = payload.email ? `${payload.email.slice(0, 3)}***@${payload.email.split('@')[1]}` : 'N/A';
+            console.log(`[Google OAuth Verified Access Token] sub: ${maskedSub}, email: ${maskedEmail}`);
+          }
+        }
+      } catch (tokenErr) {
+        console.warn(`[Google Access Token Verification Warning] ${tokenErr.message}`);
       }
     }
 

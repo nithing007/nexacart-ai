@@ -141,19 +141,33 @@ const Register = () => {
 
   const handleGoogleButtonClick = () => {
     const googleClientId = import.meta.env.VITE_GOOGLE_CLIENT_ID || '345697345656-b68bmovejdumqoqob0mbfeo5sh6i6ug8.apps.googleusercontent.com';
-    
-    if (window.google?.accounts?.id) {
-      window.google.accounts.id.prompt((notification) => {
-        if (notification.isNotDisplayed() || notification.isSkippedMoment()) {
-          const redirectUri = window.location.origin;
-          const googleAuthUrl = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${googleClientId}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=token%20id_token&scope=openid%20profile%20email&prompt=select_account&nonce=${Math.random().toString(36)}`;
-          window.open(googleAuthUrl, 'GoogleAuth', 'width=500,height=600,top=100,left=100');
-        }
+
+    if (window.google?.accounts?.oauth2) {
+      const tokenClient = window.google.accounts.oauth2.initTokenClient({
+        client_id: googleClientId,
+        scope: 'openid profile email',
+        callback: (tokenResponse) => {
+          if (tokenResponse && tokenResponse.access_token) {
+            dispatch(googleLoginAsync({ accessToken: tokenResponse.access_token }))
+              .unwrap()
+              .then((data) => {
+                const firstName = data.user?.firstName || 'User';
+                toast.success(`Welcome back, ${firstName}!`);
+                if (data?.user?.role === 'admin') {
+                  navigate('/admin');
+                } else {
+                  navigate('/user/dashboard');
+                }
+              })
+              .catch((err) => {
+                toast.error(err || 'Google registration failed');
+              });
+          }
+        },
       });
-    } else {
-      const redirectUri = window.location.origin;
-      const googleAuthUrl = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${googleClientId}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=token%20id_token&scope=openid%20profile%20email&prompt=select_account&nonce=${Math.random().toString(36)}`;
-      window.open(googleAuthUrl, 'GoogleAuth', 'width=500,height=600,top=100,left=100');
+      tokenClient.requestAccessToken({ prompt: 'select_account' });
+    } else if (window.google?.accounts?.id) {
+      window.google.accounts.id.prompt();
     }
   };
 
