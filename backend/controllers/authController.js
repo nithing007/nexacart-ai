@@ -2,11 +2,14 @@ const User = require('../models/User');
 const jwt = require('jsonwebtoken');
 const { OAuth2Client } = require('google-auth-library');
 
-const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
+const googleClient = new OAuth2Client(
+  process.env.GOOGLE_CLIENT_ID,
+  process.env.GOOGLE_CLIENT_SECRET || process.env.GOOGLE_SECRET_ID
+);
 
 // Generate JWT token
 const generateToken = (id, role) => {
-  return jwt.sign({ id, role }, process.env.JWT_SECRET, {
+  return jwt.sign({ id, role }, process.env.JWT_SECRET || process.env.JWT_SECRET_KEY || 'supersecretjwtkey', {
     expiresIn: '30d',
   });
 };
@@ -201,21 +204,20 @@ const googleAuth = async (req, res) => {
       }
     } else if (accessToken) {
       try {
-        const fetchRes = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
+        const userinfoRes = await googleClient.request({
+          url: 'https://www.googleapis.com/oauth2/v3/userinfo',
           headers: { Authorization: `Bearer ${accessToken}` }
         });
-        if (fetchRes.ok) {
-          const payload = await fetchRes.json();
-          if (payload && payload.email) {
-            targetEmail = payload.email;
-            targetGoogleId = payload.sub;
-            targetFirstName = payload.given_name || payload.name?.split(' ')[0] || 'Google';
-            targetLastName = payload.family_name || payload.name?.split(' ').slice(1).join(' ') || 'User';
+        const payload = userinfoRes?.data;
+        if (payload && payload.email) {
+          targetEmail = payload.email;
+          targetGoogleId = payload.sub;
+          targetFirstName = payload.given_name || payload.name?.split(' ')[0] || 'Google';
+          targetLastName = payload.family_name || payload.name?.split(' ').slice(1).join(' ') || 'User';
 
-            const maskedSub = payload.sub ? `${payload.sub.slice(0, 4)}...` : 'N/A';
-            const maskedEmail = payload.email ? `${payload.email.slice(0, 3)}***@${payload.email.split('@')[1]}` : 'N/A';
-            console.log(`[Google OAuth Verified Access Token] sub: ${maskedSub}, email: ${maskedEmail}`);
-          }
+          const maskedSub = payload.sub ? `${payload.sub.slice(0, 4)}...` : 'N/A';
+          const maskedEmail = payload.email ? `${payload.email.slice(0, 3)}***@${payload.email.split('@')[1]}` : 'N/A';
+          console.log(`[Google OAuth Verified Access Token] sub: ${maskedSub}, email: ${maskedEmail}`);
         }
       } catch (tokenErr) {
         console.warn(`[Google Access Token Verification Warning] ${tokenErr.message}`);
@@ -223,7 +225,7 @@ const googleAuth = async (req, res) => {
     }
 
     if (!targetEmail) {
-      return res.status(400).json({ message: 'Email is required for Google authentication' });
+      return res.status(400).json({ message: 'Google authentication failed: Email could not be verified' });
     }
 
     // 1. Primary lookup by Google sub (unique user ID)
