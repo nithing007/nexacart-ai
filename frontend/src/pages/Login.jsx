@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { Link, useNavigate } from 'react-router-dom';
 import { loginUserAsync, googleLoginAsync, clearError } from '../redux/slices/authSlice';
@@ -21,14 +21,8 @@ const Login = () => {
 
   // Google Modal State
   const [showGoogleModal, setShowGoogleModal] = useState(false);
-  const [showCustomGoogleForm, setShowCustomGoogleForm] = useState(false);
   const [customGoogleName, setCustomGoogleName] = useState('');
   const [customGoogleEmail, setCustomGoogleEmail] = useState('');
-
-  const googleAccounts = [
-    { name: 'Nithin G', email: 'gnithin399@gmail.com', googleId: 'google_nithin_399', avatarColor: 'bg-gradient-to-tr from-amber-500 to-red-600', avatarText: 'N' },
-    { name: 'Nithin G', email: 'gnithin.699@gmail.com', googleId: 'google_nithin_699', avatarColor: 'bg-emerald-700', avatarText: 'N' },
-  ];
 
   // Redirect if already authenticated based on database user role
   useEffect(() => {
@@ -47,6 +41,52 @@ const Login = () => {
       dispatch(clearError());
     };
   }, [dispatch]);
+
+  // Handle Google Identity Services (GIS) Response
+  const handleGoogleSuccess = useCallback((response) => {
+    if (response && response.credential) {
+      dispatch(googleLoginAsync({ idToken: response.credential }))
+        .unwrap()
+        .then((data) => {
+          const firstName = data.user?.firstName || 'User';
+          toast.success(`Welcome back, ${firstName}!`);
+          if (data?.user?.role === 'admin') {
+            navigate('/admin', { replace: true });
+          } else {
+            navigate('/user/dashboard', { replace: true });
+          }
+        })
+        .catch((err) => {
+          toast.error(err || 'Google Login failed');
+        });
+    }
+  }, [dispatch, navigate]);
+
+  // Initialize Google Identity Services SDK
+  useEffect(() => {
+    const googleClientId = import.meta.env.VITE_GOOGLE_CLIENT_ID || '345697345656-b68bmovejdumqoqob0mbfeo5sh6i6ug8.apps.googleusercontent.com';
+    
+    if (window.google?.accounts?.id) {
+      window.google.accounts.id.initialize({
+        client_id: googleClientId,
+        callback: handleGoogleSuccess,
+      });
+    } else {
+      const script = document.createElement('script');
+      script.src = 'https://accounts.google.com/gsi/client';
+      script.async = true;
+      script.defer = true;
+      script.onload = () => {
+        if (window.google?.accounts?.id) {
+          window.google.accounts.id.initialize({
+            client_id: googleClientId,
+            callback: handleGoogleSuccess,
+          });
+        }
+      };
+      document.body.appendChild(script);
+    }
+  }, [handleGoogleSuccess]);
 
   const handleSubmit = (e) => {
     e.preventDefault();
@@ -70,45 +110,23 @@ const Login = () => {
       });
   };
 
-  const handleGoogleAccountSelect = (account) => {
-    setShowGoogleModal(false);
-    const names = account.name.split(' ');
-    const firstName = names[0];
-    const lastName = names.slice(1).join(' ') || 'User';
-
-    dispatch(googleLoginAsync({
-      email: account.email,
-      firstName,
-      lastName,
-      googleId: account.googleId
-    }))
-      .unwrap()
-      .then((data) => {
-        toast.success(`Welcome back, ${firstName}!`);
-        if (data?.user?.role === 'admin') {
-          navigate('/admin', { replace: true });
-        } else {
-          navigate('/user/dashboard', { replace: true });
+  const handleGoogleButtonClick = () => {
+    const googleClientId = import.meta.env.VITE_GOOGLE_CLIENT_ID || '345697345656-b68bmovejdumqoqob0mbfeo5sh6i6ug8.apps.googleusercontent.com';
+    
+    if (window.google?.accounts?.id) {
+      window.google.accounts.id.prompt((notification) => {
+        if (notification.isNotDisplayed() || notification.isSkippedMoment()) {
+          // Open standard Google OAuth 2.0 authorization popup window
+          const redirectUri = window.location.origin;
+          const googleAuthUrl = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${googleClientId}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=token%20id_token&scope=openid%20profile%20email&prompt=select_account&nonce=${Math.random().toString(36)}`;
+          window.open(googleAuthUrl, 'GoogleAuth', 'width=500,height=600,top=100,left=100');
         }
-      })
-      .catch((err) => {
-        toast.error(err || 'Google Login failed');
       });
-  };
-
-  const handleCustomGoogleSubmit = (e) => {
-    e.preventDefault();
-    if (!customGoogleName.trim() || !customGoogleEmail.trim()) {
-      toast.error('Please enter name and email');
-      return;
+    } else {
+      const redirectUri = window.location.origin;
+      const googleAuthUrl = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${googleClientId}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=token%20id_token&scope=openid%20profile%20email&prompt=select_account&nonce=${Math.random().toString(36)}`;
+      window.open(googleAuthUrl, 'GoogleAuth', 'width=500,height=600,top=100,left=100');
     }
-
-    const fakeGoogleId = 'google_custom_' + Math.random().toString(36).slice(2, 9);
-    handleGoogleAccountSelect({
-      name: customGoogleName,
-      email: customGoogleEmail,
-      googleId: fakeGoogleId,
-    });
   };
 
   return (
@@ -161,7 +179,7 @@ const Login = () => {
                 <Lock className="absolute left-4 w-5 h-5 text-slate-400" />
                 <Input 
                   id="password" 
-                  type={showPassword ? "text" : "password"} 
+                  type={showPassword ? 'text' : 'password'} 
                   placeholder="Enter your password" 
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
@@ -178,7 +196,7 @@ const Login = () => {
               </div>
             </div>
 
-            {/* Remember Me Checkbox */}
+            {/* Remember Me */}
             <div className="flex items-center gap-2.5 pt-1">
               <input
                 type="checkbox"
@@ -220,28 +238,11 @@ const Login = () => {
           {/* Google Button */}
           <button
             type="button"
-            onClick={() => {
-              setShowCustomGoogleForm(false);
-              setShowGoogleModal(true);
-            }}
-            className="w-[260px] mx-auto bg-white hover:bg-slate-50 border border-slate-300 rounded-full py-1.5 px-3 flex items-center justify-between transition-all shadow-sm focus:outline-none"
+            onClick={handleGoogleButtonClick}
+            className="w-full max-w-[280px] mx-auto bg-white hover:bg-slate-50 border border-slate-300 rounded-full py-2.5 px-4 flex items-center justify-center gap-3 transition-all shadow-sm focus:outline-none"
           >
-            <div className="flex items-center gap-2">
-              {/* Profile Avatar (matches Nithin G's first account) */}
-              <div className="w-7 h-7 rounded-full bg-gradient-to-tr from-amber-500 to-red-600 flex items-center justify-center text-white font-bold text-xs overflow-hidden">
-                <span className="text-[11px]">N</span>
-              </div>
-              <div className="text-left">
-                <p className="font-semibold text-slate-800 text-[10px] leading-tight">Sign In as Nithin</p>
-                <div className="flex items-center">
-                  <p className="text-[8.5px] text-slate-500 font-medium leading-none">gnithin399@gmail.com</p>
-                  <ChevronDown className="w-2 h-2 text-slate-500 ml-0.5" />
-                </div>
-              </div>
-            </div>
-            {/* Google Icon Circle */}
-            <div className="w-6 h-6 rounded-full border border-slate-100 flex items-center justify-center bg-white shadow-sm">
-              <svg className="w-3 h-3" viewBox="0 0 24 24">
+            <div className="w-5 h-5 flex items-center justify-center">
+              <svg className="w-4 h-4" viewBox="0 0 24 24">
                 <path
                   fill="#4285F4"
                   d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
@@ -260,6 +261,7 @@ const Login = () => {
                 />
               </svg>
             </div>
+            <span className="text-xs sm:text-sm font-semibold text-slate-700">Sign in with Google</span>
           </button>
 
           <p className="text-center text-sm text-slate-500 mt-8 font-medium">
@@ -268,139 +270,6 @@ const Login = () => {
         </div>
 
       </div>
-
-      {/* Simulated Google Authentication Modal (Choose an account) */}
-      {showGoogleModal && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white w-[420px] rounded-lg shadow-2xl border border-slate-100 overflow-hidden animate-in fade-in zoom-in-95 duration-200">
-            
-            {/* Logo and Google Title Header */}
-            <div className="flex items-center gap-2 px-8 pt-8">
-              <svg className="w-5 h-5" viewBox="0 0 24 24">
-                <path
-                  fill="#4285F4"
-                  d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
-                />
-                <path
-                  fill="#34A853"
-                  d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
-                />
-                <path
-                  fill="#FBBC05"
-                  d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l3.66-2.85z"
-                />
-                <path
-                  fill="#EA4335"
-                  d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.85c.87-2.6 3.3-4.53 6.16-4.53z"
-                />
-              </svg>
-              <span className="text-[13px] font-medium text-slate-700">Sign in with Google</span>
-            </div>
-
-            {/* Choose an account Header */}
-            <div className="px-8 pt-5 text-left pb-4">
-              <h2 className="text-[22px] font-normal text-slate-800 leading-tight">Choose an account</h2>
-              <p className="text-xs text-slate-500 mt-2">
-                to continue to <span className="text-blue-600 hover:underline cursor-pointer">{window.location.hostname || 'nexacart-ai.vercel.app'}</span>
-              </p>
-            </div>
-
-            {/* Accounts List */}
-            <div className="border-t border-slate-100">
-              {!showCustomGoogleForm ? (
-                <div className="divide-y divide-slate-100">
-                  {googleAccounts.map((acc, index) => (
-                    <button
-                      key={index}
-                      onClick={() => handleGoogleAccountSelect(acc)}
-                      className="w-full flex items-center gap-3 px-8 py-3 hover:bg-slate-50 transition-colors text-left"
-                    >
-                      <div className={`w-8 h-8 rounded-full ${acc.avatarColor} flex items-center justify-center text-white font-bold text-sm`}>
-                        {acc.avatarText}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="font-semibold text-slate-800 text-[13px] leading-tight">{acc.name}</p>
-                        <p className="text-[11px] text-slate-500 leading-tight">{acc.email}</p>
-                      </div>
-                    </button>
-                  ))}
-
-                  <button
-                    onClick={() => setShowCustomGoogleForm(true)}
-                    className="w-full flex items-center gap-3 px-8 py-3.5 hover:bg-slate-50 transition-colors text-left"
-                  >
-                    <div className="w-8 h-8 rounded-full border border-slate-200 flex items-center justify-center text-slate-600 bg-white">
-                      <User className="w-4 h-4 text-slate-500" />
-                    </div>
-                    <span className="text-[13px] font-semibold text-slate-700">Use another account</span>
-                  </button>
-                </div>
-              ) : (
-                <div className="px-8 py-6 space-y-4">
-                  <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider">Use custom Google account</h4>
-                  <div className="space-y-3">
-                    <div>
-                      <Label htmlFor="customGoogleName" className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1 block">Full Name</Label>
-                      <Input
-                        id="customGoogleName"
-                        type="text"
-                        placeholder="Jane Cooper"
-                        value={customGoogleName}
-                        onChange={(e) => setCustomGoogleName(e.target.value)}
-                        className="bg-slate-50 border-slate-200 text-xs py-4 px-3"
-                        required
-                      />
-                    </div>
-                    <div>
-                      <Label htmlFor="customGoogleEmail" className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1 block">Email Address</Label>
-                      <Input
-                        id="customGoogleEmail"
-                        type="email"
-                        placeholder="jane.cooper@gmail.com"
-                        value={customGoogleEmail}
-                        onChange={(e) => setCustomGoogleEmail(e.target.value)}
-                        className="bg-slate-50 border-slate-200 text-xs py-4 px-3"
-                        required
-                      />
-                    </div>
-                  </div>
-                  <div className="flex gap-2 pt-2">
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      onClick={() => setShowCustomGoogleForm(false)}
-                      className="flex-1 py-4 text-xs font-semibold"
-                    >
-                      Back
-                    </Button>
-                    <Button
-                      type="button"
-                      onClick={handleCustomGoogleSubmit}
-                      className="flex-1 bg-green-600 hover:bg-green-700 text-white py-4 text-xs font-semibold rounded-xl"
-                    >
-                      Continue
-                    </Button>
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {/* Bottom Google Footer */}
-            <div className="border-t border-slate-100 bg-white px-8 py-4 flex justify-between items-center text-[11px] text-slate-500">
-              <div className="flex items-center gap-0.5 cursor-pointer hover:text-slate-700">
-                <span>English (United Kingdom)</span>
-                <ChevronDown className="w-3.5 h-3.5" />
-              </div>
-              <div className="flex gap-3 font-semibold">
-                <a href="#" onClick={(e) => { e.preventDefault(); setShowGoogleModal(false); }} className="text-red-500 hover:underline">Cancel</a>
-                <a href="#" className="hover:underline">Help</a>
-                <a href="#" className="hover:underline">Privacy</a>
-                <a href="#" className="hover:underline">Terms</a>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 };

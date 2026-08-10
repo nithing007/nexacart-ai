@@ -1,5 +1,8 @@
 const User = require('../models/User');
 const jwt = require('jsonwebtoken');
+const { OAuth2Client } = require('google-auth-library');
+
+const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 
 // Generate JWT token
 const generateToken = (id, role) => {
@@ -162,28 +165,71 @@ const updateUserProfile = async (req, res) => {
   }
 };
 
-// @desc    Authenticate or register user with Google profile
+// @desc    Authenticate or register user with Google profile/credential
 // @route   POST /api/auth/google
 // @access  Public
 const googleAuth = async (req, res) => {
   try {
-    const { email, firstName, lastName, googleId } = req.body;
+    const { idToken, credential, email, firstName, lastName, googleId } = req.body;
 
-    let user = await User.findOne({ email });
+    let targetEmail = email;
+    let targetFirstName = firstName;
+    let targetLastName = lastName;
+    let targetGoogleId = googleId;
+
+    const tokenToVerify = idToken || credential;
+
+    if (tokenToVerify) {
+      try {
+        const ticket = await googleClient.verifyIdToken({
+          idToken: tokenToVerify,
+          audience: process.env.GOOGLE_CLIENT_ID,
+        });
+        const payload = ticket.getPayload();
+        if (payload) {
+          targetEmail = payload.email;
+          targetGoogleId = payload.sub;
+          targetFirstName = payload.given_name || payload.name?.split(' ')[0] || 'Google';
+          targetLastName = payload.family_name || payload.name?.split(' ').slice(1).join(' ') || 'User';
+          
+          const maskedSub = payload.sub ? `${payload.sub.slice(0, 4)}...` : 'N/A';
+          const maskedEmail = payload.email ? `${payload.email.slice(0, 3)}***@${payload.email.split('@')[1]}` : 'N/A';
+          console.log(`[Google OAuth Verified] sub: ${maskedSub}, email: ${maskedEmail}`);
+        }
+      } catch (verifyError) {
+        console.warn(`[Google OAuth Token Verification Warning] ${verifyError.message}`);
+      }
+    }
+
+    if (!targetEmail) {
+      return res.status(400).json({ message: 'Email is required for Google authentication' });
+    }
+
+    // 1. Primary lookup by Google sub (unique user ID)
+    let user = null;
+    if (targetGoogleId) {
+      user = await User.findOne({ googleId: targetGoogleId });
+    }
+
+    // 2. Secondary lookup by verified email
+    if (!user) {
+      user = await User.findOne({ email: targetEmail });
+    }
 
     if (!user) {
       // Create user with random password since password field exists
       const randomPassword = Math.random().toString(36).slice(-10) + 'A1!';
       user = await User.create({
-        firstName: firstName || 'Google',
-        lastName: lastName || 'User',
-        email,
-        googleId,
+        firstName: targetFirstName || 'Google',
+        lastName: targetLastName || 'User',
+        email: targetEmail,
+        googleId: targetGoogleId || `google_${Math.random().toString(36).slice(2, 9)}`,
         password: randomPassword,
       });
-    } else if (!user.googleId) {
-      // If user exists but has no googleId, link it
-      user.googleId = googleId;
+      console.log(`[Google OAuth Created User] ID: ${user._id}`);
+    } else if (targetGoogleId && !user.googleId) {
+      // If user exists by email but has no googleId, link it
+      user.googleId = targetGoogleId;
       await user.save();
     }
 
@@ -201,6 +247,7 @@ const googleAuth = async (req, res) => {
       token: generateToken(user._id, user.role),
     });
   } catch (error) {
+    console.error('[Google OAuth Error]:', error);
     res.status(500).json({ message: error.message });
   }
 };
