@@ -2,9 +2,12 @@ const User = require('../models/User');
 const jwt = require('jsonwebtoken');
 const { OAuth2Client } = require('google-auth-library');
 
+const getGoogleClientId = () => (process.env.GOOGLE_CLIENT_ID || '').trim();
+const getGoogleClientSecret = () => (process.env.GOOGLE_CLIENT_SECRET || process.env.GOOGLE_SECRET_ID || '').trim();
+
 const googleClient = new OAuth2Client(
-  process.env.GOOGLE_CLIENT_ID,
-  process.env.GOOGLE_CLIENT_SECRET || process.env.GOOGLE_SECRET_ID
+  getGoogleClientId(),
+  getGoogleClientSecret()
 );
 
 // Generate JWT token
@@ -173,12 +176,12 @@ const updateUserProfile = async (req, res) => {
 // @access  Public
 const googleAuth = async (req, res) => {
   try {
-    const { idToken, credential, accessToken, email, firstName, lastName, googleId } = req.body;
+    const { idToken, credential, accessToken } = req.body;
 
-    let targetEmail = email;
-    let targetFirstName = firstName;
-    let targetLastName = lastName;
-    let targetGoogleId = googleId;
+    let targetEmail = null;
+    let targetFirstName = null;
+    let targetLastName = null;
+    let targetGoogleId = null;
 
     const tokenToVerify = idToken || credential;
 
@@ -186,10 +189,10 @@ const googleAuth = async (req, res) => {
       try {
         const ticket = await googleClient.verifyIdToken({
           idToken: tokenToVerify,
-          audience: process.env.GOOGLE_CLIENT_ID,
+          audience: getGoogleClientId(),
         });
         const payload = ticket.getPayload();
-        if (payload) {
+        if (payload && payload.email) {
           targetEmail = payload.email;
           targetGoogleId = payload.sub;
           targetFirstName = payload.given_name || payload.name?.split(' ')[0] || 'Google';
@@ -202,25 +205,50 @@ const googleAuth = async (req, res) => {
       } catch (verifyError) {
         console.warn(`[Google OAuth ID Token Verification Warning] ${verifyError.message}`);
       }
-    } else if (accessToken) {
-      try {
-        const userinfoRes = await googleClient.request({
-          url: 'https://www.googleapis.com/oauth2/v3/userinfo',
-          headers: { Authorization: `Bearer ${accessToken}` }
-        });
-        const payload = userinfoRes?.data;
-        if (payload && payload.email) {
-          targetEmail = payload.email;
-          targetGoogleId = payload.sub;
-          targetFirstName = payload.given_name || payload.name?.split(' ')[0] || 'Google';
-          targetLastName = payload.family_name || payload.name?.split(' ').slice(1).join(' ') || 'User';
+    }
 
-          const maskedSub = payload.sub ? `${payload.sub.slice(0, 4)}...` : 'N/A';
-          const maskedEmail = payload.email ? `${payload.email.slice(0, 3)}***@${payload.email.split('@')[1]}` : 'N/A';
-          console.log(`[Google OAuth Verified Access Token] sub: ${maskedSub}, email: ${maskedEmail}`);
+    // If ID token did not yield email, verify Access Token via getTokenInfo & userinfo API
+    if (!targetEmail && accessToken) {
+      try {
+        const tokenInfo = await googleClient.getTokenInfo(accessToken);
+        if (tokenInfo && tokenInfo.email) {
+          targetEmail = tokenInfo.email;
+          targetGoogleId = tokenInfo.sub || tokenInfo.user_id;
+          
+          const maskedSub = targetGoogleId ? `${targetGoogleId.slice(0, 4)}...` : 'N/A';
+          const maskedEmail = targetEmail ? `${targetEmail.slice(0, 3)}***@${targetEmail.split('@')[1]}` : 'N/A';
+          console.log(`[Google OAuth Verified Access Token via getTokenInfo] sub: ${maskedSub}, email: ${maskedEmail}`);
         }
       } catch (tokenErr) {
         console.warn(`[Google Access Token Verification Warning] ${tokenErr.message}`);
+      }
+
+      // Profile details fallback if name is generic
+      if (accessToken && (!targetFirstName || targetFirstName === 'Google')) {
+        try {
+          const https = require('https');
+          const userInfoData = await new Promise((resolve) => {
+            const req = https.request('https://www.googleapis.com/oauth2/v3/userinfo', {
+              headers: { Authorization: `Bearer ${accessToken}` }
+            }, (response) => {
+              let body = '';
+              response.on('data', chunk => body += chunk);
+              response.on('end', () => {
+                try { resolve(JSON.parse(body)); } catch(e) { resolve(null); }
+              });
+            });
+            req.on('error', () => resolve(null));
+            req.end();
+          });
+          if (userInfoData && userInfoData.email) {
+            targetEmail = targetEmail || userInfoData.email;
+            targetGoogleId = targetGoogleId || userInfoData.sub;
+            targetFirstName = userInfoData.given_name || userInfoData.name?.split(' ')[0] || 'Google';
+            targetLastName = userInfoData.family_name || userInfoData.name?.split(' ').slice(1).join(' ') || 'User';
+          }
+        } catch (e) {
+          // Ignore profile detail fallback error
+        }
       }
     }
 
