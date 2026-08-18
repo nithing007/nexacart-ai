@@ -4,10 +4,10 @@ import { FaGithub, FaLinkedin, FaInstagram } from 'react-icons/fa';
 
 const Footer = () => {
   return (
-    <footer className="bg-white border-t border-gray-100 pt-16 pb-8 mt-20">
+    <footer className="bg-white border-t border-gray-100 pt-10 md:pt-16 pb-6 md:pb-8 mt-10 md:mt-20">
       <div className="container mx-auto px-4">
         {/* Three Column Layout */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-12 pb-12 border-b border-gray-100">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-8 md:gap-12 pb-12 border-b border-gray-100">
           
           {/* Left Column */}
           <div className="space-y-4 text-center md:text-left">
@@ -25,7 +25,7 @@ const Footer = () => {
                 href="https://github.com" 
                 target="_blank" 
                 rel="noopener noreferrer" 
-                className="p-2 rounded-full bg-gray-55 text-gray-400 hover:text-green-600 hover:bg-green-50 transition-colors"
+                className="p-2 rounded-full bg-gray-50 text-gray-400 hover:text-green-600 hover:bg-green-50 transition-colors"
                 title="GitHub"
               >
                 <FaGithub className="w-4 h-4" />
@@ -34,7 +34,7 @@ const Footer = () => {
                 href="https://linkedin.com" 
                 target="_blank" 
                 rel="noopener noreferrer" 
-                className="p-2 rounded-full bg-gray-55 text-gray-400 hover:text-green-600 hover:bg-green-50 transition-colors"
+                className="p-2 rounded-full bg-gray-50 text-gray-400 hover:text-green-600 hover:bg-green-50 transition-colors"
                 title="LinkedIn"
               >
                 <FaLinkedin className="w-4 h-4" />
@@ -43,7 +43,7 @@ const Footer = () => {
                 href="https://instagram.com" 
                 target="_blank" 
                 rel="noopener noreferrer" 
-                className="p-2 rounded-full bg-gray-55 text-gray-400 hover:text-green-600 hover:bg-green-50 transition-colors"
+                className="p-2 rounded-full bg-gray-50 text-gray-400 hover:text-green-600 hover:bg-green-50 transition-colors"
                 title="Instagram"
               >
                 <FaInstagram className="w-4 h-4" />
@@ -89,7 +89,7 @@ const Footer = () => {
         {/* Bottom Footer */}
         <div className="flex flex-col sm:flex-row items-center justify-between pt-8 text-[11px] text-gray-400 font-medium">
           <p>© 2026 NexaCart AI. All rights reserved.</p>
-          <div className="flex items-center gap-6 mt-4 sm:mt-0">
+          <div className="flex flex-wrap justify-center items-center gap-4 sm:gap-6 mt-4 sm:mt-0">
             <a href="#" className="hover:text-green-600 transition-colors">Privacy Policy</a>
             <a href="#" className="hover:text-green-600 transition-colors">Terms of Service</a>
             <a href="#" className="hover:text-green-600 transition-colors">Contact</a>

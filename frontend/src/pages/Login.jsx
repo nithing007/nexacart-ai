@@ -28,7 +28,7 @@ const Login = () => {
       if (user.role === 'admin') {
         navigate('/admin', { replace: true });
       } else {
-        navigate('/user/dashboard', { replace: true });
+        navigate('/', { replace: true });
       }
     }
   }, [isAuthenticated, user, navigate]);
@@ -51,7 +51,7 @@ const Login = () => {
           if (data?.user?.role === 'admin') {
             navigate('/admin', { replace: true });
           } else {
-            navigate('/user/dashboard', { replace: true });
+            navigate('/', { replace: true });
           }
         })
         .catch((err) => {
@@ -82,7 +82,7 @@ const Login = () => {
         if (data?.user?.role === 'admin') {
           navigate('/admin', { replace: true });
         } else {
-          navigate('/user/dashboard', { replace: true });
+          navigate('/', { replace: true });
         }
       })
       .catch((err) => {

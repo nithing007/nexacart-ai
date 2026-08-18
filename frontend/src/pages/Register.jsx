@@ -41,7 +41,7 @@ const Register = () => {
       if (user.role === 'admin') {
         navigate('/admin');
       } else {
-        navigate('/user/dashboard');
+        navigate('/');
       }
     }
   }, [isAuthenticated, user, navigate]);
@@ -64,7 +64,7 @@ const Register = () => {
           if (data?.user?.role === 'admin') {
             navigate('/admin');
           } else {
-            navigate('/user/dashboard');
+            navigate('/');
           }
         })
         .catch((err) => {
@@ -114,7 +114,7 @@ const Register = () => {
         if (data?.user?.role === 'admin') {
           navigate('/admin');
         } else {
-          navigate('/user/dashboard');
+          navigate('/');
         }
       })
       .catch((err) => {

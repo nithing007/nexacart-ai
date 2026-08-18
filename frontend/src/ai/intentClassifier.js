@@ -94,18 +94,41 @@ export const detectCategoryFromQuery = (query = '') => {
   if (lower.includes('tv') || lower.includes('television') || lower.includes('monitor') || lower.includes('display screen')) {
     return CATEGORY_TYPES.TELEVISIONS;
   }
-  if (lower.includes('shoe') || lower.includes('sneaker') || lower.includes('jacket') || lower.includes('t-shirt') || lower.includes('clothing') || lower.includes('fashion')) {
+  if (lower.includes('shoe') || lower.includes('sneaker') || lower.includes('jacket') || lower.includes('t-shirt') || lower.includes('clothing') || lower.includes('fashion') || lower.includes('apparel')) {
     return CATEGORY_TYPES.FASHION;
   }
-  if (lower.includes('grocer') || lower.includes('food') || lower.includes('fruit') || lower.includes('milk') || lower.includes('avocado')) {
+  if (lower.includes('grocer') || lower.includes('food') || lower.includes('fruit') || lower.includes('milk') || lower.includes('avocado') || lower.includes('grocery') || lower.includes('groceries')) {
     return CATEGORY_TYPES.GROCERIES;
   }
-  if (lower.includes('chair') || lower.includes('desk') || lower.includes('table') || lower.includes('lamp') || lower.includes('furniture')) {
+  if (lower.includes('chair') || lower.includes('desk') || lower.includes('table') || lower.includes('furniture')) {
     return CATEGORY_TYPES.FURNITURE;
   }
   if (lower.includes('charger') || lower.includes('case') || lower.includes('cover') || lower.includes('cable') || lower.includes('accessory')) {
     return CATEGORY_TYPES.ACCESSORIES;
   }
+
+  // Direct check for common plural nouns denoting categories
+  const commonCategories = ['headphones', 'laptops', 'phones', 'books', 'shoes', 'toys', 'watches', 'perfumes', 'bags', 'cameras', 'instruments', 'groceries'];
+  for (const cat of commonCategories) {
+    if (lower.includes(cat)) {
+      if (cat === 'laptops') return CATEGORY_TYPES.LAPTOPS;
+      if (cat === 'phones') return CATEGORY_TYPES.MOBILE_PHONES;
+      if (cat === 'headphones') return CATEGORY_TYPES.HEADPHONES;
+      if (cat === 'groceries') return CATEGORY_TYPES.GROCERIES;
+      return cat.charAt(0).toUpperCase() + cat.slice(1);
+    }
+  }
+
+  // Dynamic noun extraction (e.g. "buy books", "show me books", "find shoes")
+  const match = lower.match(/(?:buy|show|find|recommend|get|want|search for|look for|browse)\s+(?:me\s+)?(?:some\s+)?([a-zA-Z]+s?\b)/i);
+  if (match) {
+    const extracted = match[1];
+    const stopWords = ['something', 'item', 'product', 'deal', 'offer', 'anything', 'one', 'some', 'cheap', 'best', 'good', 'rupee', 'rupees', 'rs'];
+    if (!stopWords.includes(extracted)) {
+      return extracted.charAt(0).toUpperCase() + extracted.slice(1);
+    }
+  }
+
   return null;
 };
 

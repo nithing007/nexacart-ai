@@ -1,5 +1,5 @@
-import { INTENT_TYPES, CATEGORY_TYPES, BRAND_TYPO_MAP, classifyIntent, detectCategoryFromQuery } from './intentClassifier';
-import api from '../services/api';
+import { INTENT_TYPES, CATEGORY_TYPES, BRAND_TYPO_MAP, classifyIntent, detectCategoryFromQuery } from './intentClassifier.js';
+import api from '../services/api.js';
 
 /**
  * Format numerical amount into Indian Rupee format (INR)
@@ -10,26 +10,95 @@ export const formatINR = (amount) => {
 };
 
 /**
- * Extract numerical budget from user text (e.g. "under 25000", "80k", "₹80,000")
+ * Helper to parse value with optional "K" notation (e.g., "50k" -> 50000, "0.5k" -> 500)
  */
-export const extractBudget = (text = '') => {
+const parsePriceVal = (str) => {
+  if (!str) return null;
+  const s = str.trim().toLowerCase();
+  const kMatch = s.match(/^(\d+(?:\.\d+)?)\s*k$/i);
+  if (kMatch) return Math.round(parseFloat(kMatch[1]) * 1000);
+  const cleaned = s.replace(/,/g, '').replace(/₹|rs\.?/gi, '').trim();
+  const val = parseInt(cleaned, 10);
+  return isNaN(val) ? null : val;
+};
+
+/**
+ * Extract numerical price bounds (minPrice, maxPrice) from user text
+ * Examples:
+ * - "between 500 and 700" -> { minPrice: 500, maxPrice: 700 }
+ * - "under 20000" -> { minPrice: null, maxPrice: 20000 }
+ * - "above 50000" -> { minPrice: 50000, maxPrice: null }
+ */
+export const extractPriceBounds = (text = '', memoryBase = {}) => {
   const lower = text.toLowerCase();
 
-  const kMatch = lower.match(/(\d+(?:\.\d+)?)\s*k\b/i);
-  if (kMatch) {
-    return Math.round(parseFloat(kMatch[1]) * 1000);
+  // Range pattern 1: "between 500 and 700", "between ₹500 and ₹700", "500 to 700", "500 - 700", "from 500 to 700"
+  const rangeMatch = lower.match(/(?:between|from)?\s*₹?\s*(\d[\d,.]*k?)\s*(?:and|to|-|–)\s*₹?\s*(\d[\d,.]*k?)/i);
+  if (rangeMatch) {
+    const val1 = parsePriceVal(rangeMatch[1]);
+    const val2 = parsePriceVal(rangeMatch[2]);
+    if (val1 !== null && val2 !== null) {
+      return {
+        minPrice: Math.min(val1, val2),
+        maxPrice: Math.max(val1, val2),
+        isExplicitNewRange: true
+      };
+    }
   }
 
-  const directMatch = lower.match(/(?:under|below|less than|max|budget of|budget is|around|₹|rs\.?)\s*(\d[\d,]*)/i)
-    || lower.match(/(\d[\d,]*)\s*(?:rupees|rs|budget)/i);
-
-  if (directMatch) {
-    const cleaned = directMatch[1].replace(/,/g, '');
-    const num = parseInt(cleaned, 10);
-    if (!isNaN(num) && num > 100) return num;
+  // Under / Below / Less than / Max / Up to
+  const maxMatch = lower.match(/(?:under|below|less than|max|maximum|up to|budget of|budget is|only under|only below)\s*₹?\s*(\d[\d,.]*k?)/i);
+  if (maxMatch) {
+    const val = parsePriceVal(maxMatch[1]);
+    if (val !== null) {
+      return {
+        minPrice: null,
+        maxPrice: val,
+        isExplicitNewRange: true
+      };
+    }
   }
 
-  return null;
+  // Above / More than / Over / Min / At least
+  const minMatch = lower.match(/(?:above|more than|over|greater than|at least|min|minimum)\s*₹?\s*(\d[\d,.]*k?)/i);
+  if (minMatch) {
+    const val = parsePriceVal(minMatch[1]);
+    if (val !== null) {
+      return {
+        minPrice: val,
+        maxPrice: null,
+        isExplicitNewRange: true
+      };
+    }
+  }
+
+  // Standalone price or rupees (e.g., "₹20,000", "20000 rupees")
+  const standaloneMatch = lower.match(/(?:₹|rs\.?)\s*(\d[\d,.]*k?)\b/i) || lower.match(/\b(\d[\d,.]*k?)\s*(?:rupees|rs|budget)\b/i);
+  if (standaloneMatch) {
+    const val = parsePriceVal(standaloneMatch[1]);
+    if (val !== null && val > 10) {
+      return {
+        minPrice: null,
+        maxPrice: val,
+        isExplicitNewRange: true
+      };
+    }
+  }
+
+  // Retain existing memory bounds if no new price bounds found in message
+  return {
+    minPrice: memoryBase.minPrice ?? null,
+    maxPrice: memoryBase.maxPrice ?? memoryBase.budget ?? null,
+    isExplicitNewRange: false
+  };
+};
+
+/**
+ * Backward compatibility alias for single budget
+ */
+export const extractBudget = (text = '') => {
+  const bounds = extractPriceBounds(text, {});
+  return bounds.maxPrice;
 };
 
 /**
@@ -46,25 +115,37 @@ export const extractStructuredSpecs = (query = '', memoryBase = {}) => {
     }
   });
 
+  const priceBounds = extractPriceBounds(query, memoryBase);
+  const detectedCategory = detectCategoryFromQuery(query);
+
   const specs = {
-    category: memoryBase.category || detectCategoryFromQuery(query) || '',
-    budget: extractBudget(query) || memoryBase.budget || null,
+    category: detectedCategory || memoryBase.category || '',
+    minPrice: priceBounds.minPrice,
+    maxPrice: priceBounds.maxPrice,
+    budget: priceBounds.maxPrice, // sync budget with maxPrice
     ram: memoryBase.ram || '',
     storage: memoryBase.storage || '',
+    display: memoryBase.display || '',
     processor: memoryBase.processor || '',
     brand: memoryBase.brand || '',
     purpose: memoryBase.purpose || '',
     subject: memoryBase.subject || ''
   };
 
-  // RAM extraction (e.g., 6GB RAM, 8GB, 16 GB, 6 GB)
-  const ramMatch = lower.match(/(\d{1,2})\s*gb\s*ram/i) || lower.match(/\b(\d{1,2})\s*gb\b/i);
+  // Display Type extraction (AMOLED, OLED, IPS, LCD)
+  if (lower.includes('amoled')) specs.display = 'AMOLED';
+  else if (lower.includes('oled')) specs.display = 'OLED';
+  else if (lower.includes('ips')) specs.display = 'IPS';
+  else if (lower.includes('lcd')) specs.display = 'LCD';
+
+  // RAM extraction (e.g., 4GB, 6GB, 8GB, 12GB, 16GB, 32GB)
+  const ramMatch = lower.match(/(\d{1,2})\s*gb\s*ram/i) || lower.match(/\b(4|6|8|12|16|32)\s*gb\b/i);
   if (ramMatch && !lower.includes('storage') && !lower.includes('ssd') && !lower.includes('hdd') && !lower.includes('rom')) {
     specs.ram = `${ramMatch[1]}GB`;
   }
 
-  // Storage extraction (e.g., 128GB, 256GB, 512GB, 1TB)
-  const storageMatch = lower.match(/(\d{3}|\d\s*tb)\s*(?:storage|ssd|rom)/i) || lower.match(/\b(128|256|512)\s*gb\b/i);
+  // Storage extraction (e.g., 64GB, 128GB, 256GB, 512GB, 1TB)
+  const storageMatch = lower.match(/(\d{3}|\d\s*tb)\s*(?:storage|ssd|rom)/i) || lower.match(/\b(64|128|256|512|1tb)\s*gb\b/i);
   if (storageMatch && specs.ram !== `${storageMatch[1]}GB`) {
     specs.storage = storageMatch[1].toUpperCase().includes('GB') ? storageMatch[1].toUpperCase() : `${storageMatch[1]}GB`;
   }
@@ -113,33 +194,27 @@ export const extractStructuredSpecs = (query = '', memoryBase = {}) => {
 };
 
 /**
- * FEATURE 1: CONVERSATION ISOLATION ENGINE
- * Checks whether user is continuing previous context or starting a new search reset.
+ * FEATURE 1: CONVERSATION ISOLATION & CONSTRAINTS UPDATE ENGINE
+ * Checks whether user is refining active search or starting a brand new category search.
  */
 export const resolveContextIsolation = (query = '', currentMemory = {}) => {
   const lower = query.toLowerCase();
 
-  // Continuation markers
-  const continuationPhrases = [
-    'what about', 'how about', 'also', 'under', 'cheaper', 'show alternatives',
-    'change budget', 'modify specs', 'compare these', 'compare them', 'with amoled',
-    'in black', 'with 8gb', 'with 16gb', 'show more', 'similar'
-  ];
-
-  const hasContinuationMarker = continuationPhrases.some(p => lower.includes(p));
-
   const newDetectedCategory = detectCategoryFromQuery(query);
 
-  // If query specifies a NEW category that differs from memory category, RESET CONTEXT!
+  // If query specifies an EXPLICIT NEW category that differs from current category, RESET CONTEXT!
   if (newDetectedCategory && currentMemory.category && newDetectedCategory !== currentMemory.category) {
     return {
       isReset: true,
       cleanMemory: {
         category: newDetectedCategory,
         subject: '',
+        minPrice: null,
+        maxPrice: null,
         budget: null,
         ram: '',
         storage: '',
+        display: '',
         processor: '',
         brand: '',
         purpose: '',
@@ -150,9 +225,34 @@ export const resolveContextIsolation = (query = '', currentMemory = {}) => {
     };
   }
 
-  // If query does NOT have continuation markers and specifies a brand new product type, RESET!
+  // Refinement / Follow-up triggers (e.g. "between 500 and 700", "under 30000", "only samsung", "show cheaper ones")
+  const isRefinementOrModification = 
+    lower.includes('between') ||
+    lower.includes('under') ||
+    lower.includes('below') ||
+    lower.includes('above') ||
+    lower.includes('only') ||
+    lower.includes('actually') ||
+    lower.includes('now') ||
+    lower.includes('make it') ||
+    lower.includes('cheaper') ||
+    lower.includes('with') ||
+    lower.includes('gb') ||
+    lower.includes('ram') ||
+    lower.includes('amoled') ||
+    lower.includes('oled') ||
+    extractPriceBounds(query, {}).isExplicitNewRange;
+
+  if (isRefinementOrModification && currentMemory.category) {
+    return {
+      isReset: false,
+      cleanMemory: currentMemory
+    };
+  }
+
+  // Check for fresh search phrase without memory
   const isFreshSearchQuery = (lower.includes('i want') || lower.includes('i need') || lower.includes('find me') || lower.includes('show me') || lower.includes('search'))
-    && !hasContinuationMarker;
+    && newDetectedCategory && newDetectedCategory !== currentMemory.category;
 
   if (isFreshSearchQuery) {
     return {
@@ -160,9 +260,12 @@ export const resolveContextIsolation = (query = '', currentMemory = {}) => {
       cleanMemory: {
         category: newDetectedCategory || '',
         subject: '',
+        minPrice: null,
+        maxPrice: null,
         budget: null,
         ram: '',
         storage: '',
+        display: '',
         processor: '',
         brand: '',
         purpose: '',
@@ -436,39 +539,18 @@ export const processUserMessage = async (userMessage, currentMemory = {}, userSt
       // Perform Strict Product Filtering & Multi-Factor Ranking
       const {
         matchedProducts,
-        nearAlternatives,
         missingCriteria,
         detectedCategoryName
       } = runStrictSearchPipeline(allProducts, query, updatedMemory);
 
-      // FEATURE 4: STRICT PRODUCT FILTERING & ZERO HALLUCINATION REFUSAL
+      // STEP 5: STRICT CONSTRAINT VALIDATION & ZERO MATCH REFUSAL
       if (matchedProducts.length === 0) {
-        // Step A: Check if near alternatives exist in the SAME category (REQUIREMENT 5: SMART FALLBACK)
-        if (nearAlternatives.length > 0) {
-          const requestedSpecStr = updatedMemory.processor || updatedMemory.brand || 'specified model';
-          const altProcessor = nearAlternatives[0].name.includes('Snapdragon') ? 'Snapdragon' : 'available';
-
-          const fallbackQuestionText = `We couldn't find a **${requestedSpecStr}** ${detectedCategoryName.toLowerCase()} in our catalog.\n\nWould you like to see similar ${detectedCategoryName.toLowerCase()}s with **${altProcessor}** processors?`;
-
-          return {
-            text: fallbackQuestionText,
-            isSmartFallback: true,
-            fallbackOptions: nearAlternatives.slice(0, 3),
-            products: [],
-            followUps: ["Show Alternatives", "Change Budget", "Modify Specs"],
-            memory: updatedMemory,
-            intent
-          };
-        }
-
-        // Step B: Zero Hallucination Refusal Response (REQUIREMENT 4)
+        const categoryLabel = detectedCategoryName ? detectedCategoryName.toLowerCase() : 'product';
         const missingList = missingCriteria.length > 0
           ? missingCriteria.map(c => `• ${c}`).join('\n')
-          : `• ${updatedMemory.ram || '6GB RAM'}\n• ${updatedMemory.storage || '128GB Storage'}\n• ${updatedMemory.processor || 'MediaTek Processor'}`;
+          : '• Selected specifications';
 
-        const categoryLabel = detectedCategoryName ? detectedCategoryName.toLowerCase() : 'product';
-
-        const refusalText = `Sorry, we currently don't have a ${categoryLabel} matching:\n\n${missingList}\n\nin our catalog.`;
+        const refusalText = `I couldn't find a ${categoryLabel} matching all those requirements in our catalog:\n\n${missingList}\n\nWould you like me to relax one of the specifications?`;
 
         return {
           text: refusalText,
@@ -550,84 +632,114 @@ export const processUserMessage = async (userMessage, currentMemory = {}, userSt
  */
 
 const runStrictSearchPipeline = (products = [], query = '', memory = {}) => {
-  // Detect exact target category
-  const targetCategory = memory.category || detectCategoryFromQuery(query) || CATEGORY_TYPES.MOBILE_PHONES;
+  // Detect exact target category - do NOT default to MOBILE_PHONES
+  const targetCategory = memory.category || detectCategoryFromQuery(query) || null;
 
   const missingCriteria = [];
 
   // Track extracted target specs
   if (memory.ram) missingCriteria.push(`${memory.ram} RAM`);
   if (memory.storage) missingCriteria.push(`${memory.storage} Storage`);
+  if (memory.display) missingCriteria.push(`${memory.display} Display`);
   if (memory.processor) missingCriteria.push(`${memory.processor} Processor`);
   if (memory.brand) missingCriteria.push(`${memory.brand} Brand`);
-  if (memory.budget) missingCriteria.push(`Budget under ${formatINR(memory.budget)}`);
+  if (memory.minPrice !== null && memory.minPrice !== undefined && memory.maxPrice !== null && memory.maxPrice !== undefined) {
+    missingCriteria.push(`Price between ${formatINR(memory.minPrice)} and ${formatINR(memory.maxPrice)}`);
+  } else if (memory.maxPrice !== null && memory.maxPrice !== undefined) {
+    missingCriteria.push(`Price under ${formatINR(memory.maxPrice)}`);
+  } else if (memory.minPrice !== null && memory.minPrice !== undefined) {
+    missingCriteria.push(`Price above ${formatINR(memory.minPrice)}`);
+  }
 
   // Step 1: Category Filter (Strict Boundary!)
   const categoryPool = products.filter(p => {
+    if (!targetCategory) return true; // Broad search if no category specified
+
     const pCat = (p.category || '').toLowerCase();
     const pName = (p.name || '').toLowerCase();
+    const pDesc = (p.description || '').toLowerCase();
 
-    if (targetCategory === CATEGORY_TYPES.MOBILE_PHONES) {
+    const lowerTarget = targetCategory.toLowerCase();
+
+    // Mobiles category mapping
+    if (lowerTarget === CATEGORY_TYPES.MOBILE_PHONES.toLowerCase() || lowerTarget === 'mobiles' || lowerTarget === 'mobile' || lowerTarget === 'phone' || lowerTarget === 'phones') {
       const isPhone = pCat.includes('mobile') || pCat.includes('phone') || pName.includes('phone') || pName.includes('mobile') || pName.includes('iphone') || pName.includes('galaxy') || pName.includes('5g') || (pCat.includes('electronics') && (pName.includes('samsung') || pName.includes('realme') || pName.includes('poco') || pName.includes('vivo') || pName.includes('oppo') || pName.includes('redmi') || pName.includes('oneplus') || pName.includes('nothing') || pName.includes('motorola') || pName.includes('iqoo') || pName.includes('xiaomi') || pName.includes('infinix') || pName.includes('tecno') || pName.includes('nokia') || pName.includes('honor')));
       const isForbidden = pName.includes('headphone') || pName.includes('laptop') || pName.includes('macbook') || pName.includes('charger') || pName.includes('monitor') || pName.includes('keyboard');
       return isPhone && !isForbidden;
     }
 
-    if (targetCategory === CATEGORY_TYPES.LAPTOPS) {
+    // Laptops category mapping
+    if (lowerTarget === CATEGORY_TYPES.LAPTOPS.toLowerCase() || lowerTarget === 'laptop' || lowerTarget === 'laptops') {
       const isLaptop = pName.includes('laptop') || pName.includes('macbook') || pName.includes('notebook');
       return isLaptop;
     }
 
-    if (targetCategory === CATEGORY_TYPES.HEADPHONES) {
-      return pName.includes('headphone') || pName.includes('earbud') || pName.includes('audio');
+    // Headphones category mapping
+    if (lowerTarget === CATEGORY_TYPES.HEADPHONES.toLowerCase() || lowerTarget === 'headphone' || lowerTarget === 'headphones') {
+      return pName.includes('headphone') || pName.includes('earbud') || pName.includes('audio') || pName.includes('earphone');
     }
 
-    if (targetCategory === CATEGORY_TYPES.GROCERIES) {
-      return pCat.includes('grocer') || pName.includes('avocado') || pName.includes('food');
+    // Groceries category mapping
+    if (lowerTarget === CATEGORY_TYPES.GROCERIES.toLowerCase() || lowerTarget === 'grocery' || lowerTarget === 'groceries') {
+      return pCat.includes('grocer') || pName.includes('avocado') || pName.includes('food') || pName.includes('grocery');
     }
 
-    if (targetCategory === CATEGORY_TYPES.FASHION) {
-      return pCat.includes('fashion') || pName.includes('shoe') || pName.includes('sneaker');
+    // Fashion category mapping
+    if (lowerTarget === CATEGORY_TYPES.FASHION.toLowerCase() || lowerTarget === 'fashion' || lowerTarget === 'shoe' || lowerTarget === 'shoes' || lowerTarget === 'sneaker' || lowerTarget === 'clothing' || lowerTarget === 'apparel') {
+      return pCat.includes('fashion') || pName.includes('shoe') || pName.includes('sneaker') || pName.includes('shirt') || pName.includes('t-shirt');
     }
 
-    return true;
+    // Dynamic category match check
+    return pCat.includes(lowerTarget) || pName.includes(lowerTarget) || pDesc.includes(lowerTarget);
   });
 
-  // Step 2: Strict Spec Filtering & Scoring
+  // Step 2: Strict Spec & Numeric Price Bounds Filtering
   const matched = [];
-  const nearAlternatives = [];
 
   categoryPool.forEach(product => {
     const pName = product.name.toLowerCase();
     const pDesc = (product.description || '').toLowerCase();
 
-    let specMatchScore = 100;
     let satisfiesAllStrict = true;
+
+    // Price Bounds Check (STRICT)
+    if (memory.minPrice !== null && memory.minPrice !== undefined && product.price < memory.minPrice) {
+      satisfiesAllStrict = false;
+    }
+    if (memory.maxPrice !== null && memory.maxPrice !== undefined && product.price > memory.maxPrice) {
+      satisfiesAllStrict = false;
+    }
+
+    // Display Type Check
+    if (memory.display) {
+      const dispLower = memory.display.toLowerCase();
+      if (!pName.includes(dispLower) && !pDesc.includes(dispLower)) {
+        satisfiesAllStrict = false;
+      }
+    }
 
     // Processor check
     if (memory.processor) {
       const procLower = memory.processor.toLowerCase();
       if (!pName.includes(procLower) && !pDesc.includes(procLower)) {
         satisfiesAllStrict = false;
-        specMatchScore -= 40;
       }
     }
 
     // RAM check
     if (memory.ram) {
-      const ramLower = memory.ram.toLowerCase();
-      if (!pName.includes(ramLower) && !pDesc.includes(ramLower)) {
+      const ramNum = memory.ram.replace(/gb/gi, '');
+      const ramPattern = new RegExp(`\\b${ramNum}\\s*gb\\b`, 'i');
+      if (!ramPattern.test(pName) && !ramPattern.test(pDesc)) {
         satisfiesAllStrict = false;
-        specMatchScore -= 20;
       }
     }
 
     // Storage check
     if (memory.storage) {
-      const storLower = memory.storage.toLowerCase();
-      if (!pName.includes(storLower) && !pDesc.includes(storLower)) {
+      const storVal = memory.storage.toLowerCase();
+      if (!pName.includes(storVal) && !pDesc.includes(storVal)) {
         satisfiesAllStrict = false;
-        specMatchScore -= 20;
       }
     }
 
@@ -636,38 +748,19 @@ const runStrictSearchPipeline = (products = [], query = '', memory = {}) => {
       const brandLower = memory.brand.toLowerCase();
       if (!pName.includes(brandLower) && !pDesc.includes(brandLower)) {
         satisfiesAllStrict = false;
-        specMatchScore -= 30;
       }
     }
 
-    // Budget check
-    if (memory.budget && product.price > memory.budget) {
-      satisfiesAllStrict = false;
-      specMatchScore -= 30;
-    }
-
-    // REQUIREMENT 7: MULTI-FACTOR RANKING SCORE
-    // Score = Spec Match (50%) + Rating (25%) + Price Efficiency (25%)
-    const ratingScore = (product.rating || 4.0) * 10;
-    const priceEfficiency = memory.budget ? Math.max(0, 100 - Math.abs(memory.budget - product.price) / 1000) : 50;
-
-    const totalScore = (specMatchScore * 0.5) + (ratingScore * 0.25) + (priceEfficiency * 0.25);
-    product._rankScore = totalScore;
-
     if (satisfiesAllStrict) {
       matched.push(product);
-    } else if (specMatchScore >= 40) {
-      nearAlternatives.push(product);
     }
   });
 
-  // Sort by calculated multi-factor rank score
-  matched.sort((a, b) => (b._rankScore || 0) - (a._rankScore || 0));
-  nearAlternatives.sort((a, b) => (b._rankScore || 0) - (a._rankScore || 0));
+  // Sort matched products by rating descending
+  matched.sort((a, b) => (b.rating || 0) - (a.rating || 0));
 
   return {
     matchedProducts: matched,
-    nearAlternatives,
     missingCriteria: Array.from(new Set(missingCriteria)),
     detectedCategoryName: targetCategory
   };

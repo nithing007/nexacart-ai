@@ -49,14 +49,11 @@ const generateGeminiContent = async (prompt) => {
 };
 
 /**
- * AI-powered Smart Search using natural language via Google Gemini.
+ * AI-powered Smart Search using natural language via Google Gemini & aiSearchEngine.
  */
-const getSmartSearchResults = async (query, allProducts) => {
-  const client = getGeminiClient();
-  const lowerQuery = query.toLowerCase();
-
+const getSmartSearchResults = async (query, allProducts, activeContext = {}) => {
   // Load products if not provided
-  if (!allProducts) {
+  if (!allProducts || allProducts.length === 0) {
     try {
       const Product = require('../models/Product');
       allProducts = await Product.find({});
@@ -65,94 +62,31 @@ const getSmartSearchResults = async (query, allProducts) => {
     }
   }
 
-  // Local fallback logic grounded in category
-  const localFallback = () => {
-    let maxPrice = Infinity;
-    const priceMatch = lowerQuery.match(/(?:under|below|less than|max|budget of)\s*₹?\s*(\d+)/i) 
-      || lowerQuery.match(/(\d+)\s*(?:budget|price limit|rupees|rs)/i);
-    
-    if (priceMatch) {
-      maxPrice = Number(priceMatch[1]);
-    }
-
-    let detectedSubject = '';
-    if (lowerQuery.includes('phone') || lowerQuery.includes('mobile') || lowerQuery.includes('iphone') || lowerQuery.includes('samsung') || lowerQuery.includes('realme') || lowerQuery.includes('poco')) {
-      detectedSubject = 'phone';
-    } else if (lowerQuery.includes('laptop') || lowerQuery.includes('macbook') || lowerQuery.includes('computer')) {
-      detectedSubject = 'laptop';
-    } else if (lowerQuery.includes('headphone') || lowerQuery.includes('earbud') || lowerQuery.includes('audio') || lowerQuery.includes('sony')) {
-      detectedSubject = 'headphone';
-    } else if (lowerQuery.includes('grocer') || lowerQuery.includes('avocado') || lowerQuery.includes('food') || lowerQuery.includes('fruit')) {
-      detectedSubject = 'groceries';
-    } else if (lowerQuery.includes('shoe') || lowerQuery.includes('sneaker') || lowerQuery.includes('jacket') || lowerQuery.includes('fashion')) {
-      detectedSubject = 'fashion';
-    }
-
-    let matches = allProducts.filter(p => {
-      const pName = p.name.toLowerCase();
-      const pDesc = (p.description || '').toLowerCase();
-      
-      if (detectedSubject === 'phone') {
-        if (!pName.includes('phone') && !pName.includes('mobile') && !pName.includes('iphone') && !pName.includes('galaxy') && !pName.includes('smartphone')) return false;
-      } else if (detectedSubject === 'laptop') {
-        if (!pName.includes('laptop') && !pName.includes('macbook')) return false;
-      }
-      
-      if (p.price > maxPrice) return false;
-      return true;
-    });
-
-    matches = [...matches].sort((a, b) => b.rating - a.rating).slice(0, 5);
-
-    const productIds = matches.map(m => m._id.toString());
-    const matchedNames = matches.map(m => m.name).join(', ');
-
-    return {
-      productIds,
-      reasoning: matches.length > 0 
-        ? `Found ${matches.length} catalog matches fitting your request for "${query}": ${matchedNames}. All selected items satisfy price and specification boundaries.`
-        : `No matching items found in our catalog for "${query}". Please consider expanding budget or adjusting spec requirements.`,
-      recommendations: `Only items currently in stock within the matching category are presented.`
-    };
-  };
-
-  if (!client) {
-    return localFallback();
-  }
+  const {
+    extractRequirementsWithGemini,
+    filterProductsStrictly,
+    generateResponseFromProducts
+  } = require('./aiSearchEngine');
 
   try {
-    const serializedProducts = allProducts.map(p => ({
-      id: p._id.toString(),
-      name: p.name,
-      description: p.description,
-      price: p.price,
-      originalPrice: p.originalPrice,
-      category: p.category,
-      rating: p.rating
-    }));
+    const reqs = await extractRequirementsWithGemini(query, [], activeContext);
+    const matched = filterProductsStrictly(allProducts, reqs);
+    const resp = await generateResponseFromProducts(reqs, matched, query);
 
-    const prompt = `You are a ChatGPT-style AI Shopping Copilot for NexaCart. The user wants to search our catalog: "${query}".
-Here is the available catalog JSON:
-${JSON.stringify(serializedProducts)}
-
-STRICT RULES:
-1. ONLY pick products that strictly belong to the user's requested item category (e.g. if phone requested, NEVER pick laptops or headphones).
-2. ONLY pick products that satisfy the requested specs (RAM, storage, brand, price limit).
-3. If zero products match, return empty productIds array. NEVER recommend unrelated products.
-4. Provide structured reasoning explaining why each selected product fits.
-
-Return JSON format:
-{
-  "productIds": ["id1", "id2"],
-  "reasoning": "Clear explanation of matches satisfying extracted requirements.",
-  "recommendations": "Category-specific follow-up advice."
-}`;
-
-    const resText = await callGeminiWithFallback(client, prompt, true);
-    return JSON.parse(resText);
+    return {
+      productIds: matched.map(m => m._id.toString()),
+      reasoning: resp.text || resp.reasoning,
+      recommendations: matched.length > 0
+        ? `Found ${matched.length} verified item(s) in catalog matching your requirements.`
+        : `No matching items found in catalog for specified requirements.`
+    };
   } catch (error) {
     console.error('Gemini Smart Search Error:', error);
-    return localFallback();
+    return {
+      productIds: [],
+      reasoning: `Could not process query "${query}". Please verify requirements.`,
+      recommendations: 'No matching items found.'
+    };
   }
 };
 

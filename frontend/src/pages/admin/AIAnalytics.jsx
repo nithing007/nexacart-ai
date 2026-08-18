@@ -101,8 +101,8 @@ const AIAnalytics = () => {
         {/* AI Conversations Over Time */}
         <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-xs">
           <h3 className="font-bold text-slate-900 text-sm mb-4">Conversations Volume Over Time</h3>
-          <div className="h-64">
-            <ResponsiveContainer width="100%" height="100%">
+          <div className="h-64 min-h-[250px] w-full">
+            <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
               <AreaChart data={conversationTimeData}>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
                 <XAxis dataKey="day" axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#94a3b8' }} />
@@ -117,8 +117,8 @@ const AIAnalytics = () => {
         {/* Peak Usage Hours */}
         <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-xs">
           <h3 className="font-bold text-slate-900 text-sm mb-4">Peak AI Chat Activity Hours</h3>
-          <div className="h-64">
-            <ResponsiveContainer width="100%" height="100%">
+          <div className="h-64 min-h-[250px] w-full">
+            <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
               <BarChart data={peakHoursData}>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
                 <XAxis dataKey="hour" axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#94a3b8' }} />

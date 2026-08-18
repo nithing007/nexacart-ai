@@ -53,8 +53,8 @@ const AIPerformance = () => {
       {/* Latency Graph */}
       <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-xs">
         <h3 className="font-bold text-slate-900 text-sm mb-4">Response Latency Trend (ms)</h3>
-        <div className="h-64">
-          <ResponsiveContainer width="100%" height="100%">
+        <div className="h-64 min-h-[250px] w-full">
+          <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
             <LineChart data={latencyData}>
               <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
               <XAxis dataKey="time" axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#94a3b8' }} />

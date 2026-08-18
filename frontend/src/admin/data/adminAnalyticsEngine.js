@@ -1,6 +1,54 @@
 // Admin BI Telemetry & Analytics Engine
 // Computes real-time business intelligence metrics from store state & AI interactions
 
+export const initialMockNotifications = [
+  {
+    id: 'n1',
+    type: 'inventory',
+    title: 'Low Stock Alert: Samsung Galaxy S24 Ultra',
+    message: 'Stock is down to 18 units. Predicted to run out of stock in 5 days.',
+    timestamp: '10 mins ago',
+    unread: true,
+    iconType: 'AlertTriangle'
+  },
+  {
+    id: 'n2',
+    type: 'missing_product',
+    title: 'Missing Request Spike: Sony WH-1000XM5',
+    message: '42 users queried for noise cancelling XM5 headphones this week.',
+    timestamp: '25 mins ago',
+    unread: true,
+    iconType: 'PackageX'
+  },
+  {
+    id: 'n3',
+    type: 'order',
+    title: 'High Value Order Received: ₹1,45,000',
+    message: 'Order #ORD-9842 placed by Nithin G containing 3 items.',
+    timestamp: '1 hour ago',
+    unread: true,
+    iconType: 'ShoppingBag'
+  },
+  {
+    id: 'n4',
+    type: 'ai_insight',
+    title: 'AI Smart Campaign Suggested',
+    message: 'Gaming Laptop cart abandonment is 38%. Enable GAMER15 campaign to boost conversion by 24%.',
+    timestamp: '2 hours ago',
+    unread: true,
+    iconType: 'Sparkles'
+  },
+  {
+    id: 'n5',
+    type: 'budget',
+    title: 'Monthly User Savings Target Achieved',
+    message: 'NexaCart AI helped users save ₹1,45,320 in grocery and electronics budgets this month.',
+    timestamp: '5 hours ago',
+    unread: false,
+    iconType: 'TrendingUp'
+  }
+];
+
 export const mockRecentOrders = [
   {
     id: 'ORD-9842',

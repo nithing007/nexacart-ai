@@ -86,7 +86,7 @@ export const triggerGoogleAuth = (onSuccessCallback, dispatch, googleLoginAsync,
                     if (data?.user?.role === 'admin') {
                       navigate('/admin', { replace: true });
                     } else {
-                      navigate('/user/dashboard', { replace: true });
+                      navigate('/', { replace: true });
                     }
                   });
               }
@@ -108,7 +108,7 @@ export const triggerGoogleAuth = (onSuccessCallback, dispatch, googleLoginAsync,
               if (data?.user?.role === 'admin') {
                 navigate('/admin', { replace: true });
               } else {
-                navigate('/user/dashboard', { replace: true });
+                navigate('/', { replace: true });
               }
             });
         }
