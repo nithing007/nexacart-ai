@@ -50,38 +50,12 @@ function App() {
   const dispatch = useDispatch();
   const { isAuthenticated, token } = useSelector((state) => state.auth);
 
-  // Handle OAuth Popup Messages and Clean Raw URL Parameters
+  // Clean raw OAuth parameters from visible address bar if present
   useEffect(() => {
-    // 1. If inside an OAuth popup, post message to opener window and close popup immediately
-    if (window.opener && (window.location.search.includes('access_token') || window.location.hash.includes('access_token') || window.location.search.includes('iss='))) {
-      const searchParams = new URLSearchParams(window.location.search || window.location.hash.replace('#', '?'));
-      const accessToken = searchParams.get('access_token');
-      const idToken = searchParams.get('id_token') || searchParams.get('credential');
-      if (accessToken || idToken) {
-        window.opener.postMessage({ type: 'NEXACART_GOOGLE_OAUTH', accessToken, idToken }, window.location.origin);
-        window.close();
-        return;
-      }
-    }
-
-    // 2. Clean raw OAuth parameters from visible address bar if present
     if (window.location.search.includes('iss=') || window.location.search.includes('access_token=') || window.location.hash.includes('access_token=')) {
       window.history.replaceState({}, document.title, window.location.pathname);
     }
-
-    // 3. Listen for postMessage from OAuth popups in main window
-    const handleMessage = (event) => {
-      if (event.origin !== window.location.origin) return;
-      if (event.data && event.data.type === 'NEXACART_GOOGLE_OAUTH') {
-        const { accessToken, idToken } = event.data;
-        if (accessToken || idToken) {
-          dispatch(googleLoginAsync({ accessToken, idToken }));
-        }
-      }
-    };
-    window.addEventListener('message', handleMessage);
-    return () => window.removeEventListener('message', handleMessage);
-  }, [dispatch]);
+  }, []);
 
   // Restore session if token exists
   useEffect(() => {

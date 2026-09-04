@@ -1,13 +1,18 @@
 // Singleton Google Identity Services (GIS) Helper
 let isGisInitialized = false;
 let activeCallback = null;
+let initializedClientId = null;
 
 export const getGoogleClientId = () => {
-  return (import.meta.env.VITE_GOOGLE_CLIENT_ID || '345697345656-b68bmovejdumqoqob0mbfeo5sh6i6ug8.apps.googleusercontent.com').trim();
+  const envId = import.meta.env.VITE_GOOGLE_CLIENT_ID;
+  const rawId = envId && envId !== 'undefined' ? envId : '345697345656-b68bmovejdumqoqob0mbfeo5sh6i6ug8.apps.googleusercontent.com';
+  return rawId.trim().replace(/^["']|["']$/g, '');
 };
 
 export const initGoogleIdService = (onSuccessCallback) => {
-  activeCallback = onSuccessCallback;
+  if (onSuccessCallback) {
+    activeCallback = onSuccessCallback;
+  }
 
   const handleCredentialResponse = (response) => {
     if (activeCallback) {
@@ -16,13 +21,20 @@ export const initGoogleIdService = (onSuccessCallback) => {
   };
 
   const setupGis = () => {
-    if (window.google?.accounts?.id && !isGisInitialized) {
-      isGisInitialized = true;
-      window.google.accounts.id.initialize({
-        client_id: getGoogleClientId(),
-        callback: handleCredentialResponse,
-        auto_select: false,
-      });
+    const clientId = getGoogleClientId();
+    if (window.google?.accounts?.id) {
+      if (!isGisInitialized || initializedClientId !== clientId) {
+        isGisInitialized = true;
+        initializedClientId = clientId;
+        window.google.accounts.id.initialize({
+          client_id: clientId,
+          callback: handleCredentialResponse,
+          auto_select: false,
+          itp_support: true,
+          ux_mode: 'popup',
+          use_fedcm_for_prompt: true,
+        });
+      }
     }
   };
 
